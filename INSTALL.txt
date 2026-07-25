@@ -1,4 +1,4 @@
-HCQ 1.0.0 — Windows Installation
+HCQ 1.1.0 — Windows Installation
 ================================
 
 Requirements
@@ -13,7 +13,7 @@ Installation
 1. Close Houdini.
 2. Open your Houdini user preference directory, normally:
    C:\Users\<you>\Documents\houdini21.0
-3. Extract the contents of HCQ-1.0.0-windows.zip into that directory.
+3. Extract the contents of HCQ-1.1.0-windows.zip into that directory.
 4. Confirm these paths exist:
    <houdini user preference directory>\packages\hcq.json
    <houdini user preference directory>\HCQ\python3.11libs\hcq

@@ -5,9 +5,9 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import text
 from .bridge import item_value, mapping
@@ -72,7 +72,7 @@ def _select_data(combo: QtWidgets.QComboBox, data: Any) -> None:
 
 
 class JobSettingsWidget(QtWidgets.QWidget):
-    """Form for every public HCQ 1.0 job setting."""
+    """Form for every public HCQ job setting."""
 
     changed = QtCore.Signal()
 
@@ -274,16 +274,27 @@ class JobSettingsWidget(QtWidgets.QWidget):
 
 
 class QueueEditorDialog(QtWidgets.QDialog):
-    """Edit a deep copy of a queue; accepting never mutates the source."""
+    """Modeless editor that commits its deep copy only through Save."""
 
     def __init__(
         self,
         queue: Any | None = None,
         parent: QtWidgets.QWidget | None = None,
+        *,
+        save_handler: Callable[[Any], Any] | None = None,
+        existing_queue: bool | None = None,
     ):
         super().__init__(parent)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setWindowModality(QtCore.Qt.WindowModality.NonModal)
         self.setWindowTitle(text.QUEUE_EDITOR_TITLE)
         self.resize(980, 720)
+        self._save_handler = save_handler
+        self._existing_queue = (
+            queue is not None if existing_queue is None else existing_queue
+        )
+        self._committing = False
+        self._completed = False
         if queue is not None:
             self.queue = copy.deepcopy(queue)
         elif QueueTemplate is not None:
@@ -300,6 +311,8 @@ class QueueEditorDialog(QtWidgets.QDialog):
         self._dirty = False
         self._build()
         self._load_queue()
+        self._connect_queue_changes()
+        self._dirty = False
 
     def _build(self) -> None:
         outer = QtWidgets.QVBoxLayout(self)
@@ -365,17 +378,35 @@ class QueueEditorDialog(QtWidgets.QDialog):
 
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Save
-            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+            | QtWidgets.QDialogButtonBox.StandardButton.Discard
         )
         save_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Save)
         save_button.setText(text.SAVE)
         save_as = buttons.addButton(
             text.SAVE_AS, QtWidgets.QDialogButtonBox.ButtonRole.ActionRole
         )
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-        save_as.clicked.connect(self._accept_as)
+        discard = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Discard)
+        discard.setText(text.DISCARD)
+        save_button.clicked.connect(lambda: self._save_and_close(False))
+        save_as.clicked.connect(lambda: self._save_and_close(True))
+        discard.clicked.connect(self._discard)
         outer.addWidget(buttons)
+
+    def _connect_queue_changes(self) -> None:
+        for widget, signal_name in (
+            (self.name, "textChanged"),
+            (self.group, "textChanged"),
+            (self.description, "textChanged"),
+            (self.hip_file, "textChanged"),
+            (self.favorite, "toggled"),
+            (self.cpu_mode, "currentIndexChanged"),
+            (self.cpu_value, "valueChanged"),
+        ):
+            getattr(widget, signal_name).connect(self._mark_dirty)
+
+    def _mark_dirty(self, *_args: Any) -> None:
+        if not self._completed:
+            self._dirty = True
 
     def _jobs(self) -> list[Any]:
         if isinstance(self.queue, dict):
@@ -518,10 +549,6 @@ class QueueEditorDialog(QtWidgets.QDialog):
         except Exception as error:
             show_error(self, f"Could not import jobs:\n{error}")
 
-    def _accept_as(self) -> None:
-        self.setProperty("saveAs", True)
-        self._accept()
-
     def _select_job(self, row: int, _column: int, *_unused: Any) -> None:
         item = self.jobs.item(row, 0)
         self.job_settings.set_job(
@@ -600,7 +627,7 @@ class QueueEditorDialog(QtWidgets.QDialog):
         self._dirty = self._dirty or bool(selected)
         self._refresh_jobs()
 
-    def _accept(self) -> None:
+    def _apply_fields(self) -> Any:
         self.job_settings.apply()
         cpu = {
             "mode": self.cpu_mode.currentData(),
@@ -629,4 +656,105 @@ class QueueEditorDialog(QtWidgets.QDialog):
             normalize = getattr(self.queue, "normalize_order", None)
             if callable(normalize):
                 normalize()
-        self.accept()
+        return self.queue
+
+    def _save_candidate(self, save_as: bool) -> Any:
+        queue = self._apply_fields()
+        if not (save_as and self._existing_queue):
+            return queue
+        candidate = copy.deepcopy(queue)
+        from hcq.utils import new_id, now_iso
+
+        timestamp = now_iso()
+        if isinstance(candidate, dict):
+            candidate["id"] = new_id("queue")
+            candidate["created_at"] = timestamp
+            candidate["updated_at"] = timestamp
+            for job in candidate.get("jobs", []):
+                if isinstance(job, dict):
+                    job["id"] = new_id("job")
+        else:
+            candidate.id = new_id("queue")
+            candidate.created_at = timestamp
+            candidate.updated_at = timestamp
+            for job in item_value(candidate, "jobs", []):
+                job.id = new_id("job")
+        return candidate
+
+    def _commit(self, save_as: bool) -> bool:
+        if self._completed or self._committing:
+            return False
+        self._committing = True
+        try:
+            candidate = self._save_candidate(save_as)
+            if self._save_handler is not None:
+                self._save_handler(candidate)
+            self.queue = candidate
+            self._dirty = False
+            self._completed = True
+            self.setProperty("saveAs", save_as)
+            return True
+        except Exception as error:
+            show_error(self, f"Could not save the queue:\n{error}")
+            return False
+        finally:
+            self._committing = False
+
+    def _save_and_close(self, save_as: bool) -> None:
+        if self._commit(save_as):
+            self.setResult(QtWidgets.QDialog.DialogCode.Accepted)
+            self.close()
+
+    def _discard(self) -> None:
+        if self._dirty:
+            decision = QtWidgets.QMessageBox.question(
+                self,
+                "Discard Changes",
+                "Discard all unsaved queue changes?",
+                QtWidgets.QMessageBox.StandardButton.Discard
+                | QtWidgets.QMessageBox.StandardButton.Cancel,
+                QtWidgets.QMessageBox.StandardButton.Cancel,
+            )
+            if decision != QtWidgets.QMessageBox.StandardButton.Discard:
+                return
+        self._dirty = False
+        self._completed = True
+        self.setResult(QtWidgets.QDialog.DialogCode.Rejected)
+        self.close()
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        if self._completed or not self._dirty:
+            event.accept()
+            return
+        decision = QtWidgets.QMessageBox.warning(
+            self,
+            "Unsaved Queue Changes",
+            "Save changes before closing the Queue Editor?",
+            QtWidgets.QMessageBox.StandardButton.Save
+            | QtWidgets.QMessageBox.StandardButton.Discard
+            | QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Save,
+        )
+        if decision == QtWidgets.QMessageBox.StandardButton.Save:
+            if self._commit(False):
+                self.setResult(QtWidgets.QDialog.DialogCode.Accepted)
+                event.accept()
+            else:
+                event.ignore()
+        elif decision == QtWidgets.QMessageBox.StandardButton.Discard:
+            self._dirty = False
+            self._completed = True
+            self.setResult(QtWidgets.QDialog.DialogCode.Rejected)
+            event.accept()
+        else:
+            event.ignore()
+
+    def reject(self) -> None:
+        self._discard()
+
+    def _accept(self) -> None:
+        """Compatibility helper for non-interactive smoke tests."""
+        self._apply_fields()
+        self._dirty = False
+        self._completed = True
+        super().accept()

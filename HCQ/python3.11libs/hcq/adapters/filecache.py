@@ -50,9 +50,13 @@ class FileCacheAdapter(ActionAdapter):
             constructed_path = False
         if constructed_path:
             return parameter_output_patterns(node, ("sopoutput",))
-        return parameter_output_patterns(node, ("file",)) or parameter_output_patterns(
-            node, ("sopoutput",)
-        )
+        return parameter_output_patterns(node, ("file",))
+
+    def requires_output(self, node: Any, job: Job) -> bool:
+        return True
+
+    def missing_output_message(self, node: Any, job: Job) -> str:
+        return "The File Cache output path is empty or unresolved."
 
     def _verification_patterns(
         self, node: Any, job: Job, patterns: list[str]

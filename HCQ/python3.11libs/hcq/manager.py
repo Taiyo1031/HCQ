@@ -6,15 +6,17 @@ import copy
 from pathlib import Path
 from typing import Any, Callable
 
+from .constants import VERSION
 from .cook_monitor import CookMonitor
 from .import_export import export_queues, import_queues
 from .logging_utils import configure_logging
 from .models import QueueTemplate, RunList
 from .navigation import HoudiniNavigation
-from .notifications import NotificationCenter
+from .notifications import NotificationCenter, WindowsNotificationPresenter
 from .queue_runner import QueueRunner
 from .recovery import RecoveryService
 from .storage import Storage, atomic_write_json, default_storage_root
+from .updater import UpdateService
 from .utils import new_id, now_iso
 from .validation import parse_queue_document
 
@@ -30,6 +32,7 @@ class HCQManager:
         self.storage = Storage(default_storage_root(hou_module), version)
         self.logger = configure_logging(self.storage.paths.logs)
         self.settings = self.storage.load_settings()
+        self.updater = UpdateService(self.storage.paths.root)
         self.queues = self.storage.load_queues()
         self.run_list = RunList(
             save_before_running=str(self.settings.get("save_before_running", "always")),
@@ -39,11 +42,26 @@ class HCQManager:
             ),
         )
         self.navigation = HoudiniNavigation(hou_module)
+        icon_path = (
+            Path(__file__).resolve().parents[2]
+            / "config"
+            / "Icons"
+            / "HCQ.svg"
+        )
         self.notifications = NotificationCenter(
             hou_module=hou_module,
             merge_rapid=bool(self.settings.get("merge_rapid_notifications", True)),
             navigation=self.navigation,
+            windows_presenter=WindowsNotificationPresenter(
+                hou_module=hou_module,
+                icon_path=str(icon_path),
+            ),
         )
+        update_notification_settings = getattr(
+            self.notifications, "update_settings", None
+        )
+        if callable(update_notification_settings):
+            update_notification_settings(self.settings)
         self.monitor = CookMonitor(
             self.storage,
             self.settings,
@@ -95,7 +113,11 @@ class HCQManager:
                 f"{len(interrupted)} interrupted HCQ run session(s) require attention.",
             )
         self.notify_changed("all")
-        self.logger.info("HCQ %s started in Houdini %s.", "1.0.0", self.hou.applicationVersionString())
+        self.logger.info(
+            "HCQ %s started in Houdini %s.",
+            VERSION,
+            self.hou.applicationVersionString(),
+        )
 
     def shutdown(self) -> None:
         if not self._started:
@@ -143,6 +165,11 @@ class HCQManager:
         self.queues = self.storage.load_queues()
         self.settings.clear()
         self.settings.update(self.storage.load_settings())
+        update_notification_settings = getattr(
+            self.notifications, "update_settings", None
+        )
+        if callable(update_notification_settings):
+            update_notification_settings(self.settings)
         self.monitor.update_settings(self.settings)
         self.notify_changed("all")
 
@@ -157,6 +184,11 @@ class HCQManager:
             self.settings.get("existing_output_behavior", "ask_each")
         )
         self.storage.save_settings(self.settings)
+        update_notification_settings = getattr(
+            self.notifications, "update_settings", None
+        )
+        if callable(update_notification_settings):
+            update_notification_settings(self.settings)
         self.monitor.update_settings(self.settings)
         self.notify_changed("settings")
 

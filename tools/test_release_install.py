@@ -3,12 +3,56 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+
+SOURCE_LIB = Path(__file__).resolve().parents[1] / "HCQ" / "python3.11libs"
+if str(SOURCE_LIB) not in sys.path:
+    sys.path.insert(0, str(SOURCE_LIB))
+
+from hcq.constants import VERSION
+
+
+def validate_release_contract(archive: Path) -> None:
+    checksum_file = archive.with_name(f"{archive.name}.sha256")
+    if not checksum_file.is_file():
+        raise FileNotFoundError(checksum_file)
+    fields = checksum_file.read_text(encoding="utf-8-sig").split()
+    expected = fields[0].lower() if fields else ""
+    digest = hashlib.sha256()
+    with archive.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != expected:
+        raise AssertionError("Release archive checksum mismatch.")
+
+    with zipfile.ZipFile(archive) as source:
+        manifest = json.loads(source.read("HCQ/HCQ_MANIFEST.json"))
+        if (
+            manifest.get("schema") != "hcq.release-manifest"
+            or manifest.get("schema_version") != 1
+            or manifest.get("hcq_version") != VERSION
+        ):
+            raise AssertionError("Release manifest metadata is invalid.")
+        declared = {item["path"]: item["sha256"] for item in manifest["files"]}
+        actual = {
+            name
+            for name in source.namelist()
+            if not name.endswith("/")
+            and name not in {"HCQ/HCQ_MANIFEST.json", "INSTALL.txt"}
+        }
+        if set(declared) != actual:
+            raise AssertionError("Release manifest file list is incomplete.")
+        for name, expected_file_digest in declared.items():
+            if hashlib.sha256(source.read(name)).hexdigest() != expected_file_digest:
+                raise AssertionError(f"Release file checksum mismatch: {name}")
 
 
 def main() -> int:
@@ -16,7 +60,7 @@ def main() -> int:
     parser.add_argument(
         "--archive",
         type=Path,
-        default=Path("dist/HCQ-1.0.0-windows.zip"),
+        default=Path(f"dist/HCQ-{VERSION}-windows.zip"),
     )
     parser.add_argument(
         "--houdini-root",
@@ -30,6 +74,7 @@ def main() -> int:
         raise FileNotFoundError(archive)
     if not hython.is_file():
         raise FileNotFoundError(hython)
+    validate_release_contract(archive)
 
     with tempfile.TemporaryDirectory(prefix="hcq-clean-install-") as temporary:
         install_root = Path(temporary)
@@ -67,7 +112,7 @@ def main() -> int:
             raise AssertionError(
                 f"HCQ loaded from {module_path}, expected under {expected_root}."
             )
-        if payload["version"] != "1.0.0":
+        if payload["version"] != VERSION:
             raise AssertionError(payload)
         print(json.dumps(payload, indent=2))
     return 0

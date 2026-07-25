@@ -1,4 +1,4 @@
-"""Cross-process run lock for Windows Houdini sessions."""
+"""Small cross-process lock shared by the updater and startup bootstrap."""
 
 from __future__ import annotations
 
@@ -8,26 +8,23 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-class ExecutionLockError(RuntimeError):
+class UpdateLockError(RuntimeError):
     pass
 
 
-class ExecutionLock:
+class UpdateFileLock:
     _guard = threading.Lock()
-    _owned = False
+    _owned_paths: set[str] = set()
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self._stream: BinaryIO | None = None
-
-    @property
-    def acquired(self) -> bool:
-        return self._stream is not None
+        self._key = os.path.normcase(str(self.path.resolve()))
 
     def acquire(self) -> None:
         with self._guard:
-            if ExecutionLock._owned:
-                raise ExecutionLockError("Another HCQ run session is active in this process.")
+            if self._key in self._owned_paths:
+                raise UpdateLockError("Another HCQ update operation is active.")
             self.path.parent.mkdir(parents=True, exist_ok=True)
             stream = self.path.open("a+b")
             stream.seek(0)
@@ -38,15 +35,19 @@ class ExecutionLock:
             stream.seek(0)
             try:
                 if os.name != "nt":
-                    raise ExecutionLockError("HCQ supports Windows only.")
+                    raise UpdateLockError(
+                        "HCQ automatic updates are supported on Windows only."
+                    )
                 import msvcrt
 
                 msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            except (OSError, ExecutionLockError) as exc:
+            except (OSError, UpdateLockError) as error:
                 stream.close()
-                raise ExecutionLockError("Another HCQ run session is active.") from exc
+                raise UpdateLockError(
+                    "Another HCQ update operation is active."
+                ) from error
             self._stream = stream
-            ExecutionLock._owned = True
+            self._owned_paths.add(self._key)
 
     def release(self) -> None:
         with self._guard:
@@ -60,9 +61,9 @@ class ExecutionLock:
             finally:
                 self._stream.close()
                 self._stream = None
-                ExecutionLock._owned = False
+                self._owned_paths.discard(self._key)
 
-    def __enter__(self) -> "ExecutionLock":
+    def __enter__(self) -> "UpdateFileLock":
         self.acquire()
         return self
 

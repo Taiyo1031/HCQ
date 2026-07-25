@@ -14,6 +14,7 @@ from .cpu import resolve_thread_limit
 from .models import Job, QueueTemplate, RunList
 from .utils import normalized_path
 from .validation import validate_job
+from .verification import output_path_is_resolved
 
 
 @dataclass
@@ -128,7 +129,7 @@ class PreflightChecker:
             )
         if os.name != "nt":
             report.issues.append(
-                PreflightIssue("error", "unsupported_platform", "HCQ 1.0 supports Windows only.")
+                PreflightIssue("error", "unsupported_platform", "HCQ supports Windows only.")
             )
 
     def _check_queue_hip(
@@ -197,8 +198,20 @@ class PreflightChecker:
             report.issues.append(
                 PreflightIssue("error", "adapter_validation", message, queue.id, job.id)
             )
-        patterns = list(dict.fromkeys([*job.expected_outputs, *adapter.expected_output_patterns(node, job)]))
-        self._check_outputs(queue, job, run_list, patterns, output_owners, report)
+        adapter_patterns = list(
+            dict.fromkeys(adapter.expected_output_patterns(node, job))
+        )
+        patterns = list(dict.fromkeys([*job.expected_outputs, *adapter_patterns]))
+        self._check_outputs(
+            queue,
+            job,
+            run_list,
+            patterns,
+            output_owners,
+            report,
+            output_required=adapter.requires_output(node, job),
+            required_patterns=adapter_patterns,
+        )
 
     def _check_job_hip(
         self,
@@ -335,9 +348,39 @@ class PreflightChecker:
         patterns: list[str],
         output_owners: dict[str, tuple[str, str]],
         report: PreflightReport,
+        *,
+        output_required: bool = False,
+        required_patterns: list[str] | None = None,
     ) -> None:
+        required_patterns = patterns if required_patterns is None else required_patterns
+        if output_required and not any(
+            str(pattern).strip() for pattern in required_patterns
+        ):
+            report.issues.append(
+                PreflightIssue(
+                    "warning",
+                    "unresolved_output_path",
+                    "The File Cache output path is empty or unresolved.",
+                    queue.id,
+                    job.id,
+                )
+            )
+            if not any(str(pattern).strip() for pattern in patterns):
+                return
+
         for pattern in patterns:
             expanded = self._expand(pattern)
+            if not output_path_is_resolved(expanded):
+                report.issues.append(
+                    PreflightIssue(
+                        "warning",
+                        "unresolved_output_path",
+                        f"Output path is empty or unresolved: {pattern}",
+                        queue.id,
+                        job.id,
+                    )
+                )
+                continue
             owner_key = os.path.normcase(expanded)
             if owner_key in output_owners:
                 previous_queue, previous_job = output_owners[owner_key]
@@ -371,8 +414,12 @@ class PreflightChecker:
                         f"Output directory does not exist: {parent}",
                         queue.id,
                         job.id,
-                        ("continue", "skip", "stop"),
-                        {"path": str(parent)},
+                        context={
+                            "path": str(parent),
+                            "existing_ancestor": (
+                                str(existing_parent) if existing_parent.exists() else ""
+                            ),
+                        },
                     )
                 )
             if existing_parent.exists() and not os.access(existing_parent, os.W_OK):
@@ -403,6 +450,17 @@ class PreflightChecker:
             matches = glob.glob(self._glob_pattern(expanded))
             if not matches and not any(token in expanded for token in ("*", "?", "[")):
                 matches = [expanded] if Path(expanded).exists() else []
+            if not matches and parent.exists():
+                report.issues.append(
+                    PreflightIssue(
+                        "warning",
+                        "output_not_created",
+                        f"Output does not exist yet: {expanded}",
+                        queue.id,
+                        job.id,
+                        context={"path": expanded},
+                    )
+                )
             if matches:
                 behavior = run_list.existing_output_behavior
                 choices: tuple[str, ...] = ()

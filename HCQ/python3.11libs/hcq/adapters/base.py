@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from ..models import Job
 from ..utils import deduplicated, expand_frame_pattern, frame_values
-from ..verification import verify_outputs
+from ..verification import output_path_is_resolved, verify_outputs
 
 
 @dataclass
@@ -159,15 +159,27 @@ class ActionAdapter:
         result.errors.extend(message for message in after_errors if message not in before_errors)
         result.warnings.extend(message for message in after_warnings if message not in before_warnings)
 
-        patterns = deduplicated(
-            [*job.expected_outputs, *self.expected_output_patterns(node, job)]
-        )
+        adapter_patterns = deduplicated(self.expected_output_patterns(node, job))
+        patterns = deduplicated([*job.expected_outputs, *adapter_patterns])
         if job.verification == "basic" and not result.cancelled:
             verification_patterns = self._verification_patterns(node, job, patterns)
+            required_patterns = self._verification_patterns(
+                node,
+                job,
+                adapter_patterns,
+            )
+            if self.requires_output(node, job) and not any(
+                output_path_is_resolved(self._expand_pattern(pattern))
+                for pattern in required_patterns
+            ):
+                result.success = False
+                result.errors.append(self.missing_output_message(node, job))
             verification = verify_outputs(
                 verification_patterns,
                 started_at,
                 self._expand_pattern,
+                require_patterns=self.requires_output(node, job),
+                missing_patterns_message=self.missing_output_message(node, job),
             )
             result.output_paths.extend(verification.output_paths)
             result.warnings.extend(verification.warnings)
@@ -191,6 +203,13 @@ class ActionAdapter:
     def expected_output_patterns(self, node: Any, job: Job) -> list[str]:
         # Generic and custom actions have no reliable standard output contract.
         return []
+
+    def requires_output(self, node: Any, job: Job) -> bool:
+        """Return whether Basic Verification must resolve at least one output."""
+        return False
+
+    def missing_output_message(self, node: Any, job: Job) -> str:
+        return "No output path could be resolved for this job."
 
     def planned_output_paths(self, node: Any, job: Job) -> list[str]:
         """Resolve expected paths before cooking so recovery can inspect them."""

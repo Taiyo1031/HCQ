@@ -22,7 +22,7 @@ No third-party Python package is required at runtime.
 ### Install the release archive
 
 1. Close Houdini.
-2. Download `HCQ-1.0.0-windows.zip`, or build it with
+2. Download `HCQ-1.1.0-windows.zip`, or build it with
    `python tools/build_release.py`.
 3. Find your Houdini user preference directory. For Houdini 21.0 on Windows,
    the default location is:
@@ -32,7 +32,7 @@ No third-party Python package is required at runtime.
    ```
 
 4. Extract the **contents** of the ZIP directly into that directory. Do not
-   add another `HCQ-1.0.0-windows` wrapper folder.
+   add another `HCQ-1.1.0-windows` wrapper folder.
 5. Confirm that the installed layout contains:
 
    ```text
@@ -63,12 +63,37 @@ $env:HOUDINI_PACKAGE_DIR = "C:\path\to\HCQ\packages"
 The Package JSON resolves the sibling `HCQ` directory automatically. Restart
 Houdini after changing Python, Shelf, Python Panel, or Package files.
 
+### Update an installed copy
+
+HCQ 1.1.0 is the first release with the built-in updater, so install this
+version manually using the archive instructions above. Future updates can be
+prepared from the compact **Update** button in the panel header:
+
+1. Click **Update**.
+2. HCQ checks the latest stable GitHub Release.
+3. The Windows ZIP and its SHA-256 checksum are downloaded and verified.
+4. When **Update Ready** appears, close and restart Houdini.
+
+Only files listed in the release manifest are replaced. Queues, Monitor
+registrations, settings, logs, history, and recovery data are preserved. A
+backup is made before replacement and restored if installation fails.
+If an update changes a Package, Shelf, or Python Panel definition, restart
+Houdini once more after HCQ reports that the update was installed.
+
+If HCQ cannot prove that a failed update was rolled back safely, it stops
+loading and writes `HCQ/updates/UPDATE_RECOVERY_REQUIRED.json`. Restore the
+latest matching folder under `HCQ/updates/backups`, then restart Houdini.
+
+Automatic replacement is disabled for Git source checkouts. In that case,
+**Update** links to the release page and the checkout must be updated with Git.
+
 ## Main workflows
 
 ### Queue Runner
 
 1. Open the **Queues** tab and create a Queue Template.
-2. Add selected nodes or enter node paths.
+2. Add selected nodes or enter node paths. Queue Editor is modeless: keep it
+   open, select nodes in a Network Editor, then click **Add Selected Nodes**.
 3. Confirm each job's action, frame range, CPU limit, error behavior, and
    output verification.
 4. Add one or more templates to the **Run** tab.
@@ -92,6 +117,22 @@ be unresponsive while a foreground operation is running; this is expected.
 Cook Monitor does not start cooks. It checks only registered nodes and shows a
 notification when it detects a completed cook. Monitoring is suspended while
 Queue Runner owns execution and resumes after its baselines are refreshed.
+
+Both the global Monitor switch and the individual node row must be enabled.
+The default **Minimum Cook Duration** is 5 seconds, so shorter cooks are
+detected but do not show a notification. The Monitor tab shows why a
+notification was suppressed. Change the threshold in **Settings**, click
+**Save**, and use **Test Notification** to verify the current configuration.
+
+In-Houdini notifications appear at the lower-right of the Houdini window.
+They include the result, node name, duration, and **Go to Node** when
+available. Success and warning notifications close automatically; errors stay
+visible until dismissed.
+
+Optional Windows notifications can be enabled in **Settings**. They use
+Houdini's bundled Qt system-tray support and require Windows notifications to
+be enabled for Houdini. Focus Assist or Do Not Disturb can suppress them;
+in-Houdini notifications remain available.
 
 ## Supported job actions
 
@@ -143,6 +184,11 @@ and warnings. When an output pattern is known, HCQ also checks that matching
 files exist, are non-empty, and were updated by the current job. File existence
 alone is never treated as proof that the Houdini operation succeeded.
 
+File Cache output files and parent directories do not need to exist before a
+run. Preflight checks the nearest existing parent directory without blocking
+the queue. Basic Verification still reports a failure when the File Cache
+finishes without producing its configured output.
+
 ## JSON and local data
 
 HCQ supports queue template, Run List, active status, and run result documents.
@@ -161,7 +207,8 @@ $HOUDINI_USER_PREF_DIR/HCQ/
 ├─ queues/
 ├─ runs/
 ├─ logs/
-└─ recovery/
+├─ recovery/
+└─ updates/
 ```
 
 An active run is persisted after meaningful state changes. If Houdini closes or
@@ -205,7 +252,7 @@ you also want to delete saved queues, settings, logs, and run history.
 
 ## Known limitations
 
-- HCQ 1.0 is supported on Windows only.
+- HCQ 1.1 is supported on Windows only.
 - A foreground Houdini cook may block panel repainting and input.
 - Custom HDA buttons that open modal dialogs are not guaranteed to run
   unattended.

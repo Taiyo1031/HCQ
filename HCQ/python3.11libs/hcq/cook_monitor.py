@@ -73,6 +73,9 @@ class MonitorRegistration:
     notify_on_complete: bool = True
     notify_on_warning: bool = True
     notify_on_failure: bool = True
+    notification_state: str = "ready"
+    suppression_reason: str = ""
+    last_notification_at: str | None = None
 
     @property
     def method(self) -> str:
@@ -104,6 +107,9 @@ class MonitorRegistration:
             notify_on_complete=bool(value.get("notify_on_complete", True)),
             notify_on_warning=bool(value.get("notify_on_warning", True)),
             notify_on_failure=bool(value.get("notify_on_failure", True)),
+            notification_state=str(value.get("notification_state", "ready")),
+            suppression_reason=str(value.get("suppression_reason", "")),
+            last_notification_at=value.get("last_notification_at"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -123,6 +129,9 @@ class MonitorRegistration:
             "notify_on_complete": self.notify_on_complete,
             "notify_on_warning": self.notify_on_warning,
             "notify_on_failure": self.notify_on_failure,
+            "notification_state": self.notification_state,
+            "suppression_reason": self.suppression_reason,
+            "last_notification_at": self.last_notification_at,
         }
 
 
@@ -159,6 +168,8 @@ class CookMonitor:
         self._timer: Any | None = None
         self._started = False
         self._suspend_depth = 0
+        self._playback_suppressed = False
+        self.last_suppression_reason = ""
 
         self.set_current_hip(self._current_hip_path(), persist=False)
 
@@ -173,6 +184,30 @@ class CookMonitor:
     @property
     def registrations(self) -> tuple[MonitorRegistration, ...]:
         return tuple(self._entries)
+
+    def get_notification_state(
+        self,
+        registration_or_id: MonitorRegistration | str | None = None,
+    ) -> dict[str, Any]:
+        """Return live delivery/suppression state for diagnostics and UI."""
+        if registration_or_id is None:
+            return {
+                "monitor_enabled": self.enabled,
+                "suspended": self.suspended,
+                "last_suppression_reason": self.last_suppression_reason,
+                "registrations": [
+                    self._registration_notification_state(item)
+                    for item in self._entries
+                ],
+            }
+        registration = self._resolve(registration_or_id)
+        return (
+            self._registration_notification_state(registration)
+            if registration is not None
+            else {}
+        )
+
+    notification_status = get_notification_state
 
     def subscribe(self, callback: ChangeCallback) -> Callable[[], None]:
         self._listeners.append(callback)
@@ -219,8 +254,19 @@ class CookMonitor:
             self.refresh_baselines()
         self._update_timer_state()
         for registration in self._entries:
-            if registration.enabled and registration.status != "Missing":
+            if not registration.enabled:
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "registration_disabled",
+                )
+            elif registration.status != "Missing":
                 registration.status = "Watching" if enabled else "Disabled"
+                self._set_notification_state(
+                    registration,
+                    "ready" if enabled else "suppressed",
+                    "" if enabled else "monitor_disabled",
+                )
                 self._emit(registration, "state")
 
     def update_settings(self, settings: dict[str, Any]) -> None:
@@ -232,6 +278,22 @@ class CookMonitor:
         if self._timer is not None:
             self._timer.setInterval(self._poll_interval_ms())
         self._update_timer_state()
+        if self._enabled != was_enabled:
+            for registration in self._entries:
+                if not self._enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "monitor_disabled",
+                    )
+                elif not registration.enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "registration_disabled",
+                    )
+                elif not self.suspended and registration.status != "Missing":
+                    self._set_notification_state(registration, "ready", "")
 
     def add_node(
         self,
@@ -249,6 +311,20 @@ class CookMonitor:
 
         name = display_name or (_call(node, "name", None) if node is not None else None)
         node_type = self._node_type_name(node)
+        notification_state = "ready"
+        suppression_reason = ""
+        if not enabled:
+            notification_state = "suppressed"
+            suppression_reason = "registration_disabled"
+        elif node is None:
+            notification_state = "suppressed"
+            suppression_reason = "node_missing"
+        elif not self.enabled:
+            notification_state = "suppressed"
+            suppression_reason = "monitor_disabled"
+        elif self.suspended:
+            notification_state = "suppressed"
+            suppression_reason = "queue_suspended"
         registration = MonitorRegistration(
             display_name=str(name or path.rsplit("/", 1)[-1] or path),
             node_path=path,
@@ -256,6 +332,8 @@ class CookMonitor:
             node_type=node_type,
             monitor_method=self._detect_method(node),
             status="Watching" if node is not None and enabled else ("Disabled" if not enabled else "Missing"),
+            notification_state=notification_state,
+            suppression_reason=suppression_reason,
         )
         self._entries.append(registration)
         if node is not None:
@@ -301,8 +379,28 @@ class CookMonitor:
             if node is not None:
                 self._snapshots[registration.id] = self._snapshot(node)
                 self._attach_callbacks(registration, node)
+                self._set_notification_state(
+                    registration,
+                    "ready" if self.enabled and not self.suspended else "suppressed",
+                    (
+                        ""
+                        if self.enabled and not self.suspended
+                        else ("monitor_disabled" if not self.enabled else "queue_suspended")
+                    ),
+                )
+            else:
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "node_missing",
+                )
         else:
             self._detach_callbacks(registration.id)
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                "registration_disabled",
+            )
         self._persist()
         self._emit(registration, "state")
         return True
@@ -333,6 +431,21 @@ class CookMonitor:
         self._sync_snapshot_fields(registration, snapshot)
         if registration.enabled:
             self._attach_callbacks(registration, node)
+            self._set_notification_state(
+                registration,
+                "ready" if self.enabled and not self.suspended else "suppressed",
+                (
+                    ""
+                    if self.enabled and not self.suspended
+                    else ("monitor_disabled" if not self.enabled else "queue_suspended")
+                ),
+            )
+        else:
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                "registration_disabled",
+            )
         self._persist()
         self._emit(registration, "path_changed")
         return True
@@ -356,6 +469,14 @@ class CookMonitor:
         """Suspend all observation while Queue Runner owns notifications."""
         self._suspend_depth += 1
         self._update_timer_state()
+        if self._suspend_depth == 1:
+            for registration in self._entries:
+                if registration.enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "queue_suspended",
+                    )
 
     def resume(self, refresh_baselines: bool = True) -> None:
         """Resume monitoring, refreshing baselines before the timer can fire."""
@@ -366,6 +487,23 @@ class CookMonitor:
         if refresh_baselines:
             self.refresh_baselines()
         self._update_timer_state()
+        for registration in self._entries:
+            if not registration.enabled:
+                continue
+            if not self.enabled:
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "monitor_disabled",
+                )
+            elif registration.status == "Missing":
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "node_missing",
+                )
+            else:
+                self._set_notification_state(registration, "ready", "")
 
     def refresh_baselines(self) -> None:
         """Forget cook deltas caused while monitoring was suspended."""
@@ -376,6 +514,11 @@ class CookMonitor:
             node = self._node(registration.node_path)
             if node is None:
                 registration.status = "Missing"
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "node_missing",
+                )
                 continue
             snapshot = self._snapshot(node)
             self._snapshots[registration.id] = snapshot
@@ -384,25 +527,64 @@ class CookMonitor:
 
     def poll_once(self) -> list[MonitorRegistration]:
         """Poll only registered nodes and return registrations that changed."""
-        if not self.enabled or self.suspended:
+        if not self.enabled:
+            for registration in self._entries:
+                if registration.enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "monitor_disabled",
+                    )
+            return []
+        if self.suspended:
+            for registration in self._entries:
+                if registration.enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "queue_suspended",
+                    )
             return []
         if self._playback_is_active() and bool(
             self.settings.get("suppress_monitor_during_playback", True)
         ):
             # Advance baselines while playback is active so its cooks do not
             # become a delayed notification as soon as playback stops.
+            self._playback_suppressed = True
+            for registration in self._entries:
+                if registration.enabled:
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "playback_active",
+                    )
             self.refresh_baselines()
             return []
+        if self._playback_suppressed:
+            self._playback_suppressed = False
+            for registration in self._entries:
+                if registration.enabled and registration.status != "Missing":
+                    self._set_notification_state(registration, "ready", "")
 
         changed: list[MonitorRegistration] = []
         persist = False
         for registration in tuple(self._entries):
             if not registration.enabled:
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "registration_disabled",
+                )
                 continue
             node = self._node(registration.node_path)
             if node is None:
                 if registration.status != "Missing":
                     registration.status = "Missing"
+                    self._set_notification_state(
+                        registration,
+                        "suppressed",
+                        "node_missing",
+                    )
                     changed.append(registration)
                     persist = True
                     self._emit(registration, "missing")
@@ -410,6 +592,7 @@ class CookMonitor:
 
             if registration.status == "Missing":
                 registration.status = "Watching"
+                self._set_notification_state(registration, "ready", "")
                 self._attach_callbacks(registration, node)
                 self._emit(registration, "found")
                 persist = True
@@ -475,6 +658,21 @@ class CookMonitor:
             for value in raw_entries
             if isinstance(value, dict)
         ]
+        for registration in self._entries:
+            if not registration.enabled:
+                registration.notification_state = "suppressed"
+                registration.suppression_reason = "registration_disabled"
+            elif not self.enabled:
+                registration.notification_state = "suppressed"
+                registration.suppression_reason = "monitor_disabled"
+        self.last_suppression_reason = next(
+            (
+                item.suppression_reason
+                for item in reversed(self._entries)
+                if item.suppression_reason
+            ),
+            "",
+        )
         self._snapshots.clear()
         self._cook_started_at.clear()
         self._last_notified.clear()
@@ -616,10 +814,46 @@ class CookMonitor:
         )
         should_notify = self._last_notified.get(registration.id) != signature
         self._last_notified[registration.id] = signature
-        if should_notify and self._passes_threshold(duration) and self._notification_enabled(
-            registration, result
-        ):
-            self._notify(registration, result, duration, snapshot.errors, snapshot.warnings)
+        if not should_notify:
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                "duplicate_cook",
+            )
+        elif not self._passes_threshold(duration):
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                "below_minimum_duration",
+            )
+        elif not self._notification_enabled(registration, result):
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                f"{result}_notifications_disabled",
+            )
+        else:
+            delivered = self._notify(
+                registration,
+                result,
+                duration,
+                snapshot.errors,
+                snapshot.warnings,
+            )
+            if delivered is None:
+                self._set_notification_state(
+                    registration,
+                    "suppressed",
+                    "notification_service_unavailable",
+                )
+            else:
+                merged = bool(getattr(delivered, "merged", False))
+                registration.last_notification_at = now_iso()
+                self._set_notification_state(
+                    registration,
+                    "merged" if merged else "notified",
+                    "rapid_notification_merged" if merged else "",
+                )
         self._emit(registration, "completed")
 
     def _passes_threshold(self, duration: float) -> bool:
@@ -644,9 +878,9 @@ class CookMonitor:
         duration: float,
         errors: tuple[str, ...] = (),
         warnings: tuple[str, ...] = (),
-    ) -> None:
+    ) -> Any | None:
         if self.notifications is None:
-            return
+            return None
         name = registration.display_name or registration.node_path
         details = errors if result == "failed" else warnings
         message = f"{name} finished in {duration:.1f} seconds."
@@ -659,12 +893,13 @@ class CookMonitor:
         }[result]
         callback = getattr(self.notifications, method, None)
         if callable(callback):
-            callback(
+            return callback(
                 title="Cook Failed" if result == "failed" else "Cook Completed",
                 message=message,
                 node_path=registration.node_path,
                 duration_seconds=duration,
             )
+        return None
 
     def _attach_callbacks(self, registration: MonitorRegistration, node: Any) -> None:
         self._detach_callbacks(registration.id)
@@ -769,6 +1004,11 @@ class CookMonitor:
 
         if "deleted" in name:
             registration.status = "Missing"
+            self._set_notification_state(
+                registration,
+                "suppressed",
+                "node_missing",
+            )
             self._snapshots.pop(registration.id, None)
             self._persist()
             self._emit(registration, "missing")
@@ -873,8 +1113,19 @@ class CookMonitor:
         ]
 
     def _post_ui(self, callback: Callable[[], None]) -> None:
-        if self.hou is not None and not bool(_call(self.hou, "isUIAvailable", True)):
+        available = (
+            getattr(self.hou, "isUIAvailable", None)
+            if self.hou is not None
+            else None
+        )
+        if not callable(available):
             callback()
+            return
+        try:
+            if not bool(available()):
+                callback()
+                return
+        except Exception:
             return
         ui = getattr(self.hou, "ui", None) if self.hou is not None else None
         post = getattr(ui, "postEventCallback", None)
@@ -883,8 +1134,7 @@ class CookMonitor:
                 post(callback)
                 return
             except Exception:
-                pass
-        callback()
+                return
 
     def _playback_is_active(self) -> bool:
         playbar = getattr(self.hou, "playbar", None) if self.hou is not None else None
@@ -932,6 +1182,50 @@ class CookMonitor:
     ) -> None:
         registration.last_cook_count = snapshot.cook_count
         registration.last_cook_time = snapshot.last_cook_time
+
+    def _set_notification_state(
+        self,
+        registration: MonitorRegistration,
+        state: str,
+        reason: str,
+    ) -> bool:
+        state = str(state)
+        reason = str(reason)
+        changed = (
+            registration.notification_state != state
+            or registration.suppression_reason != reason
+        )
+        registration.notification_state = state
+        registration.suppression_reason = reason
+        if reason:
+            self.last_suppression_reason = reason
+        if changed:
+            self._emit(registration, "notification_state")
+        return changed
+
+    def _registration_notification_state(
+        self,
+        registration: MonitorRegistration,
+    ) -> dict[str, Any]:
+        try:
+            threshold = max(
+                0.0,
+                float(self.settings.get("minimum_cook_duration_seconds", 5.0)),
+            )
+        except (TypeError, ValueError):
+            threshold = 5.0
+        return {
+            "id": registration.id,
+            "node_path": registration.node_path,
+            "state": registration.notification_state,
+            "suppression_reason": registration.suppression_reason,
+            "last_notification_at": registration.last_notification_at,
+            "last_duration_seconds": registration.last_duration_seconds,
+            "minimum_duration_seconds": threshold,
+            "notify_on_complete": registration.notify_on_complete,
+            "notify_on_warning": registration.notify_on_warning,
+            "notify_on_failure": registration.notify_on_failure,
+        }
 
     def _resolve(
         self,

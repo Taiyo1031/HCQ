@@ -13,7 +13,7 @@ from .cpu import TemporaryThreadLimit
 from .execution_lock import ExecutionLock, ExecutionLockError
 from .models import Job, JobResult, QueueTemplate, RunList, RunSession
 from .preflight import PreflightChecker, PreflightIssue, PreflightReport
-from .utils import now_iso
+from .utils import deduplicated, now_iso
 
 
 DecisionHandler = Callable[[str, dict[str, Any]], Any]
@@ -363,7 +363,17 @@ class QueueRunner:
             if adapter_result is not None:
                 result.errors = list(adapter_result.errors)
                 result.warnings = list(adapter_result.warnings)
-                result.output_paths = list(adapter_result.output_paths)
+                try:
+                    post_run_paths = list(adapter.planned_output_paths(node, job))
+                except BaseException:
+                    post_run_paths = []
+                result.output_paths = deduplicated(
+                    [
+                        *result.output_paths,
+                        *post_run_paths,
+                        *adapter_result.output_paths,
+                    ]
+                )
                 if adapter_result.cancelled:
                     result.state = "cancelled"
                     self._cancel_requested = True

@@ -1,6 +1,6 @@
 # HCQ JSON Format
 
-HCQ 1.0 writes human-readable UTF-8 JSON. Importing JSON never starts a run.
+HCQ 1.1 writes human-readable UTF-8 JSON. Importing JSON never starts a run.
 
 ## Common envelope
 
@@ -10,7 +10,7 @@ Every portable document contains:
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.0.0"
+  "hcq_version": "1.1.0"
 }
 ```
 
@@ -39,7 +39,7 @@ No JSON field is evaluated as Python.
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.0.0",
+  "hcq_version": "1.1.0",
   "houdini_min_version": "21.0",
   "created_with_houdini": "21.0.729",
   "queues": [

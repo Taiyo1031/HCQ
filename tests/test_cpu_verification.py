@@ -72,6 +72,35 @@ class CpuVerificationTests(unittest.TestCase):
                 any("not updated by this job" in error for error in result.errors)
             )
 
+    def test_empty_patterns_can_be_optional_or_required(self):
+        started = datetime.now().astimezone()
+        self.assertTrue(verify_outputs([], started).success)
+        required = verify_outputs(
+            [],
+            started,
+            require_patterns=True,
+            missing_patterns_message="File Cache output is required.",
+        )
+        self.assertFalse(required.success)
+        self.assertEqual(required.errors, ["File Cache output is required."])
+
+    def test_unresolved_output_pattern_fails(self):
+        for pattern in (
+            "$UNRESOLVED/cache.bgeo.sc",
+            "$FOO/cache.bgeo.sc",
+            "$FSTART/cache.bgeo.sc",
+        ):
+            with self.subTest(pattern=pattern):
+                result = verify_outputs(
+                    [pattern],
+                    datetime.now().astimezone(),
+                    expand_string=lambda value: value,
+                )
+                self.assertFalse(result.success)
+                self.assertTrue(
+                    any("empty or unresolved" in error for error in result.errors)
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

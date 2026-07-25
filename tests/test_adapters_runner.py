@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +13,7 @@ from hcq.adapters import resolve_adapter
 from hcq.adapters.button import ButtonAdapter
 from hcq.adapters.filecache import FileCacheAdapter
 from hcq.models import CpuSetting, Job, QueueTemplate, RunList
+from hcq.preflight import PreflightChecker
 from hcq.queue_runner import QueueRunner
 
 
@@ -41,8 +44,9 @@ class FakeType:
 
 
 class FakeParm:
-    def __init__(self, value=None):
+    def __init__(self, value=None, callback=None):
         self.value = value
+        self.callback = callback
         self.pressed = 0
 
     def eval(self):
@@ -53,6 +57,8 @@ class FakeParm:
 
     def pressButton(self):
         self.pressed += 1
+        if self.callback is not None:
+            return self.callback()
         return None
 
     def unexpandedString(self):
@@ -161,6 +167,164 @@ class AdapterRunnerTests(unittest.TestCase):
         adapter = ButtonAdapter(FakeHou({node.path(): node}))
         self.assertTrue(adapter.validate(node, job))
 
+    def test_filecache_filemethod_selects_only_the_active_path(self):
+        node = FakeNode(type_name="filecache::2.0")
+        node.parms.update(
+            {
+                "filemethod": FakeParm(1),
+                "file": FakeParm(""),
+                "sopoutput": FakeParm("D:/wrong/cache.$F4.bgeo.sc"),
+            }
+        )
+        job = Job(node_path=node.path(), action="filecache_save_to_disk")
+        adapter = FileCacheAdapter(FakeHou({node.path(): node}))
+        self.assertEqual(adapter.expected_output_patterns(node, job), [])
+
+        node.parms["filemethod"].set(0)
+        self.assertEqual(
+            adapter.expected_output_patterns(node, job),
+            ["D:/wrong/cache.$F4.bgeo.sc"],
+        )
+
+    def test_filecache_basic_requires_a_resolved_native_output(self):
+        node = FakeNode(type_name="filecache::2.0")
+        node.parms.update(
+            {
+                "execute": FakeParm(),
+                "filemethod": FakeParm(1),
+                "file": FakeParm(""),
+                "sopoutput": FakeParm(""),
+            }
+        )
+        job = Job(node_path=node.path(), action="filecache_save_to_disk")
+        result = FileCacheAdapter(FakeHou({node.path(): node})).execute(
+            node,
+            job,
+            datetime.now().astimezone(),
+        )
+        self.assertFalse(result.success)
+        self.assertTrue(
+            any("empty or unresolved" in error for error in result.errors)
+        )
+
+    def test_filecache_basic_fails_when_configured_output_is_not_created(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "missing.bgeo.sc"
+            node = FakeNode(type_name="filecache::2.0")
+            node.parms.update(
+                {
+                    "execute": FakeParm(),
+                    "filemethod": FakeParm(1),
+                    "file": FakeParm(str(output)),
+                }
+            )
+            job = Job(node_path=node.path(), action="filecache_save_to_disk")
+            result = FileCacheAdapter(FakeHou({node.path(): node})).execute(
+                node,
+                job,
+                datetime.now().astimezone(),
+            )
+            self.assertFalse(result.success)
+            self.assertTrue(
+                any("does not exist" in error for error in result.errors)
+            )
+
+    def test_filecache_reacquires_output_after_native_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "created.bgeo.sc"
+            node = FakeNode(type_name="filecache::2.0")
+            file_parm = FakeParm("")
+
+            def create_output():
+                file_parm.set(str(output))
+                output.write_bytes(b"cache")
+
+            node.parms.update(
+                {
+                    "execute": FakeParm(callback=create_output),
+                    "filemethod": FakeParm(1),
+                    "file": file_parm,
+                }
+            )
+            job = Job(node_path=node.path(), action="filecache_save_to_disk")
+            result = FileCacheAdapter(FakeHou({node.path(): node})).execute(
+                node,
+                job,
+                datetime.now().astimezone(),
+            )
+            self.assertTrue(result.success, result.errors)
+            self.assertEqual(result.output_paths, [str(output)])
+
+    def test_generic_basic_allows_no_output_patterns(self):
+        node = FakeNode()
+        job = Job(node_path=node.path(), action="force_cook", verification="basic")
+        hou = FakeHou({node.path(): node})
+        result = resolve_adapter(job.action, node, job, hou).execute(
+            node,
+            job,
+            datetime.now().astimezone(),
+        )
+        self.assertTrue(result.success, result.errors)
+
+    def test_filecache_preflight_output_warnings_are_nonblocking(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            node = FakeNode(type_name="filecache::2.0")
+            node.parms.update(
+                {
+                    "execute": FakeParm(),
+                    "filemethod": FakeParm(1),
+                    "file": FakeParm(""),
+                }
+            )
+            hou = FakeHou({node.path(): node})
+            job = Job(node_path=node.path(), action="filecache_save_to_disk")
+            queue = QueueTemplate(
+                name="Queue",
+                hip_file="D:/Project/test.hip",
+                jobs=[job],
+            )
+            run_list = RunList(
+                queues=[queue],
+                save_before_running="never",
+                existing_output_behavior="overwrite",
+            )
+            checker = PreflightChecker(hou)
+
+            empty_report = checker.check(run_list)
+            empty_issue = next(
+                issue
+                for issue in empty_report.issues
+                if issue.code == "unresolved_output_path"
+            )
+            self.assertTrue(empty_report.can_run)
+            self.assertFalse(empty_issue.requires_decision)
+
+            output = Path(temporary) / "new" / "cache.bgeo.sc"
+            node.parms["file"].set(str(output))
+            missing_parent_report = checker.check(run_list)
+            missing_parent = next(
+                issue
+                for issue in missing_parent_report.issues
+                if issue.code == "missing_output_directory"
+            )
+            self.assertTrue(missing_parent_report.can_run)
+            self.assertFalse(missing_parent.requires_decision)
+            self.assertEqual(
+                Path(missing_parent.context["existing_ancestor"]),
+                Path(temporary),
+            )
+
+            node.parms["file"].set(str(Path(temporary) / "cache.bgeo.sc"))
+            missing_file_report = checker.check(run_list)
+            self.assertTrue(missing_file_report.can_run)
+            self.assertTrue(
+                any(
+                    issue.code == "output_not_created"
+                    and not issue.requires_decision
+                    for issue in missing_file_report.issues
+                )
+            )
+
     def test_runner_retries_and_restores_threads(self):
         node = FakeNode()
         node.failures_remaining = 1
@@ -203,6 +367,35 @@ class AdapterRunnerTests(unittest.TestCase):
         session = runner.start(RunList(queues=[queue], save_before_running="never"))
         self.assertEqual(session.state, "failed")
         self.assertEqual(session.jobs[0].state, "failed")
+
+    def test_runner_keeps_planned_filecache_path_after_verification_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "missing.bgeo.sc"
+            node = FakeNode(type_name="filecache::2.0")
+            node.parms.update(
+                {
+                    "execute": FakeParm(),
+                    "filemethod": FakeParm(1),
+                    "file": FakeParm(str(output)),
+                }
+            )
+            hou = FakeHou({node.path(): node})
+            job = Job(node_path=node.path(), action="filecache_save_to_disk")
+            queue = QueueTemplate(
+                name="Queue",
+                hip_file="D:/Project/test.hip",
+                jobs=[job],
+            )
+            runner = QueueRunner(hou, confirm_before_run=False)
+            session = runner.start(
+                RunList(
+                    queues=[queue],
+                    save_before_running="never",
+                    existing_output_behavior="overwrite",
+                )
+            )
+            self.assertEqual(session.state, "failed")
+            self.assertIn(str(output), session.jobs[0].output_paths)
 
     def test_cancel_from_running_status_does_not_start_cook(self):
         node = FakeNode()

@@ -85,14 +85,22 @@ def call(
 
 
 def connect_refresh(
-    source: Any, callback: Callable[[], None]
+    source: Any, callback: Callable[..., None]
 ) -> Callable[[], None]:
     """Connect to commonly used manager signals without requiring one shape."""
     disconnectors: list[Callable[[], None]] = []
+
+    def dispatch(*args: Any, **_kwargs: Any) -> None:
+        topic = args[0] if args and isinstance(args[0], str) else "all"
+        try:
+            callback(topic)
+        except TypeError:
+            callback()
+
     listener = getattr(source, "add_listener", None)
     if callable(listener):
         try:
-            remove = listener(lambda *_args, **_kwargs: callback())
+            remove = listener(dispatch)
             if callable(remove):
                 disconnectors.append(remove)
         except Exception:
@@ -121,10 +129,10 @@ def connect_refresh(
             connector = getattr(signal, "connect", None)
             if callable(connector):
                 try:
-                    connector(callback)
+                    connector(dispatch)
                     seen.add(id(signal))
                     disconnectors.append(
-                        lambda signal=signal: signal.disconnect(callback)
+                        lambda signal=signal: signal.disconnect(dispatch)
                     )
                 except Exception:
                     pass

@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover - exercised outside Houdini
     hou = None  # type: ignore
 
 _manager: Any | None = None
+_shutdown_connected = False
 
 
 def startup() -> Any | None:
@@ -28,6 +29,15 @@ def startup() -> Any | None:
         from .manager import HCQManager
 
         _manager = HCQManager(hou)
+        windows_presenter = getattr(
+            _manager.notifications, "windows_presenter", None
+        )
+        set_click_callback = getattr(
+            windows_presenter, "set_click_callback", None
+        )
+        if callable(set_click_callback):
+            set_click_callback(lambda _notification: open_panel())
+        _register_shutdown()
         _manager.start()
         return _manager
     except Exception:
@@ -68,7 +78,13 @@ def open_panel() -> Any:
         if not _is_hcq_panel(pane_tab):
             continue
         try:
+            focus = getattr(pane_tab, "setIsCurrentTab", None)
+            if callable(focus):
+                focus()
             window = pane_tab.qtParentWindow()
+            show_normal = getattr(window, "showNormal", None)
+            if callable(show_normal):
+                show_normal()
             window.show()
             window.raise_()
             window.activateWindow()
@@ -87,6 +103,22 @@ def open_panel() -> Any:
     except Exception:
         pass
     return pane_tab
+
+
+def _register_shutdown() -> None:
+    global _shutdown_connected
+    if _shutdown_connected:
+        return
+    try:
+        from PySide6 import QtWidgets
+
+        application = QtWidgets.QApplication.instance()
+        if application is None:
+            return
+        application.aboutToQuit.connect(shutdown)
+        _shutdown_connected = True
+    except Exception:
+        pass
 
 
 def shutdown() -> None:

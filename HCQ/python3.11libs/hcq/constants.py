@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 MIN_HOUDINI_VERSION = (21, 0)
 PRODUCT_NAME = "HCQ"
+REPOSITORY_URL = "https://github.com/Taiyo1031/HCQ"
+USAGE_URL = f"{REPOSITORY_URL}#main-workflows"
+LATEST_RELEASE_URL = f"{REPOSITORY_URL}/releases/latest"
+LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/Taiyo1031/HCQ/releases/latest"
+)
 PRODUCT_LONG_NAME = "HCQ — Houdini Cook Queue"
 
 SCHEMA_VERSION = 1
@@ -61,6 +67,7 @@ DEFAULT_SETTINGS = {
     "minimum_cook_duration_seconds": 5.0,
     "suppress_monitor_during_playback": True,
     "merge_rapid_notifications": True,
+    "windows_notifications_enabled": False,
     "save_before_running": "always",
     "create_backup_before_saving": False,
     "default_cpu": {"mode": "current"},

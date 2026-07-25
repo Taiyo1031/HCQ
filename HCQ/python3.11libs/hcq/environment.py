@@ -1,4 +1,4 @@
-"""Runtime environment checks for HCQ 1.0."""
+"""Runtime environment checks for HCQ."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def inspect_environment(hou_module: Any | None) -> EnvironmentStatus:
     if platform != "nt":
         return EnvironmentStatus(
             False,
-            "HCQ 1.0 supports Windows only.",
+            "HCQ supports Windows only.",
             version_string,
             platform,
             ui_available,

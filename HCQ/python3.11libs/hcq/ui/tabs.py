@@ -28,6 +28,9 @@ from .dialogs import (
 from .editors import QueueEditorDialog
 
 
+_OPEN_QUEUE_EDITORS: dict[tuple[int, str], QueueEditorDialog] = {}
+
+
 def _identifier(item: Any) -> str:
     return str(item_value(item, "id", item_value(item, "queue_id", "")))
 
@@ -47,6 +50,23 @@ def _cpu_label(source: Any) -> str:
     if mode == "reserve":
         return f"Reserve {amount}"
     return labels.get(mode, mode.replace("_", " ").title())
+
+
+def _show_navigation_result(
+    parent: QtWidgets.QWidget,
+    result: Any,
+    fallback_message: str,
+) -> bool:
+    """Show failed NavigationResult messages while tolerating facade values."""
+    if result is None:
+        show_warning(parent, fallback_message)
+        return False
+    success = item_value(result, "success", None)
+    if success is False:
+        message = str(item_value(result, "message", fallback_message))
+        show_warning(parent, message or fallback_message)
+        return False
+    return True
 
 
 def _history_items(manager: Any) -> list[Any]:
@@ -114,6 +134,9 @@ class MonitorTab(QtWidgets.QWidget):
         self.toggle = QtWidgets.QCheckBox("Monitoring Enabled")
         self.toggle.toggled.connect(self._set_global_enabled)
         layout.addWidget(self.toggle)
+        self.notification_summary = QtWidgets.QLabel()
+        self.notification_summary.setWordWrap(True)
+        layout.addWidget(self.notification_summary)
         add_selected = make_button(text.ADD_SELECTED_NODES, self._add_selected)
         add_path = make_button(text.ADD_BY_PATH, self._add_path)
         remove = make_button(text.REMOVE, self._remove)
@@ -130,6 +153,7 @@ class MonitorTab(QtWidgets.QWidget):
                 "Duration",
                 "Last Cook",
                 "Result",
+                "Notification",
             ]
         )
         self.table.setDragDropMode(
@@ -177,6 +201,21 @@ class MonitorTab(QtWidgets.QWidget):
         self.toggle.blockSignals(True)
         self.toggle.setChecked(enabled)
         self.toggle.blockSignals(False)
+        threshold = float(
+            settings.get("minimum_cook_duration_seconds", 5.0)
+            if isinstance(settings, dict)
+            else item_value(
+                settings, "minimum_cook_duration_seconds", 5.0
+            )
+        )
+        self.notification_summary.setText(
+            (
+                "Notifications are enabled"
+                if enabled
+                else "Notifications are suppressed because Monitor is disabled"
+            )
+            + f" · Minimum Cook Duration: {threshold:g} s"
+        )
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         for row, registration in enumerate(self._registrations()):
@@ -184,6 +223,28 @@ class MonitorTab(QtWidgets.QWidget):
                 registration,
                 "status",
                 "Missing" if item_value(registration, "missing", False) else "Watching",
+            )
+            notification = self._notification_label(
+                registration, threshold
+            )
+            duration_value = item_value(
+                registration,
+                "last_duration_seconds",
+                item_value(registration, "last_duration", None),
+            )
+            if duration_value is None:
+                duration_label = "--"
+            else:
+                duration_seconds = float(duration_value)
+                duration_label = (
+                    f"{duration_seconds * 1000.0:.1f} ms"
+                    if duration_seconds < 1.0
+                    else f"{duration_seconds:.1f} s"
+                )
+            last_cook = item_value(
+                registration,
+                "last_completed_at",
+                item_value(registration, "last_cook", None),
             )
             set_row(
                 self.table,
@@ -199,19 +260,62 @@ class MonitorTab(QtWidgets.QWidget):
                     item_value(registration, "node_type", ""),
                     item_value(registration, "method", "Polling"),
                     str(status).title(),
-                    item_value(registration, "last_duration", "--"),
-                    item_value(
-                        registration,
-                        "last_completed_at",
-                        item_value(registration, "last_cook", "--"),
-                    ),
+                    duration_label,
+                    last_cook or "--",
                     str(item_value(registration, "last_result", "--")).title(),
+                    notification,
                 ],
                 registration,
                 checked=bool(item_value(registration, "enabled", True)),
             )
         self.table.blockSignals(False)
         self.table.resizeColumnsToContents()
+
+    @staticmethod
+    def _notification_label(registration: Any, threshold: float) -> str:
+        state = str(
+            item_value(registration, "notification_state", "ready")
+        )
+        reason = str(item_value(registration, "suppression_reason", ""))
+        if state == "notified":
+            return "Notified"
+        if state == "merged":
+            return "Merged with recent notification"
+        if reason == "below_minimum_duration":
+            duration = float(
+                item_value(registration, "last_duration_seconds", 0.0) or 0.0
+            )
+            rendered = (
+                f"{duration * 1000.0:.1f} ms"
+                if duration < 1.0
+                else f"{duration:.1f} s"
+            )
+            return f"Suppressed: {rendered} < {threshold:g} s"
+        reasons = {
+            "registration_disabled": "Suppressed: Row disabled",
+            "monitor_disabled": "Suppressed: Monitor disabled",
+            "playback_active": "Suppressed: Playback active",
+            "queue_suspended": "Suppressed: Queue running",
+            "duplicate_cook": "Suppressed: Duplicate cook",
+            "node_missing": "Suppressed: Node missing",
+            "completed_notifications_disabled": (
+                "Suppressed: Completion notifications disabled"
+            ),
+            "warning_notifications_disabled": (
+                "Suppressed: Warning notifications disabled"
+            ),
+            "failed_notifications_disabled": (
+                "Suppressed: Failure notifications disabled"
+            ),
+            "notification_service_unavailable": (
+                "Suppressed: Notification service unavailable"
+            ),
+        }
+        if reason:
+            return reasons.get(
+                reason, f"Suppressed: {reason.replace('_', ' ').title()}"
+            )
+        return state.replace("_", " ").title()
 
     def _set_global_enabled(self, enabled: bool) -> None:
         settings = value(self.manager, "settings")
@@ -307,22 +411,13 @@ class MonitorTab(QtWidgets.QWidget):
         path = str(
             item_value(registration, "node_path", item_value(registration, "path", ""))
         )
-        if call(self._monitor(), ("go_to_node", "navigate_to_node"), path) is not None:
-            return
-        try:
-            import hou
-
-            node = hou.node(path)
-            if node is None:
-                raise ValueError(path)
-            node.setSelected(True, clear_all_selected=True)
-            node.setCurrent(True, clear_all_selected=True)
-            pane = hou.ui.paneTabOfType(hou.paneTabType.NetworkEditor)
-            if pane is not None:
-                pane.setPwd(node.parent())
-                pane.homeToSelection()
-        except Exception:
-            show_warning(self, f"Node not found: {path}")
+        navigation = value(self.manager, "navigation")
+        result = call(navigation, "go_to_node", path)
+        if result is None:
+            result = call(
+                self._monitor(), ("go_to_node", "navigate_to_node"), path
+            )
+        _show_navigation_result(self, result, f"Could not navigate to node: {path}")
 
     def _locate(self) -> None:
         registration = self.table.current_object()
@@ -397,15 +492,20 @@ class QueuesTab(QtWidgets.QWidget):
         )
         self.table.itemDoubleClicked.connect(lambda *_: self._edit())
         layout.addWidget(self.table, 1)
-        buttons = [
+        primary_buttons = [
             make_button(text.ADD_TO_RUN_LIST, self._add_to_run),
             make_button(text.EDIT, self._edit),
             make_button(text.DUPLICATE, self._duplicate),
+        ]
+        file_buttons = [
             make_button(text.IMPORT_JSON, self._import),
             make_button(text.EXPORT_JSON, self._export),
             make_button(text.DELETE, self._delete),
         ]
-        layout.addLayout(compact_button_row(*buttons))
+        primary_row = compact_button_row(*primary_buttons)
+        primary_row.setSpacing(3)
+        layout.addLayout(primary_row)
+        layout.addLayout(compact_button_row(*file_buttons))
         self._groups: list[str] = []
         self.refresh()
 
@@ -454,32 +554,102 @@ class QueuesTab(QtWidgets.QWidget):
             )
         self.table.resizeColumnsToContents()
 
-    def _new(self) -> None:
-        dialog = QueueEditorDialog(None, self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            call(self.manager, "update_queue", dialog.queue)
-            self.refresh()
+    def _houdini_window(self) -> QtWidgets.QWidget:
+        hou_module = value(self.manager, "hou")
+        qt_namespace = getattr(hou_module, "qt", None)
+        main_window = getattr(qt_namespace, "mainWindow", None)
+        try:
+            parent = main_window() if callable(main_window) else None
+        except Exception:
+            parent = None
+        if isinstance(parent, QtWidgets.QWidget):
+            return parent
+        return self.window()
 
-    def _edit(self) -> None:
+    def _open_editor(
+        self,
+        queue: Any,
+        editor_key: str,
+        *,
+        existing_queue: bool,
+    ) -> QueueEditorDialog:
+        registry_key = (id(self.manager), editor_key)
+        existing = _OPEN_QUEUE_EDITORS.get(registry_key)
+        if existing is not None:
+            try:
+                existing.show()
+                existing.raise_()
+                existing.activateWindow()
+                return existing
+            except RuntimeError:
+                _OPEN_QUEUE_EDITORS.pop(registry_key, None)
+
+        save_handler = getattr(self.manager, "update_queue", None)
+        if not callable(save_handler):
+            raise RuntimeError("The Queue Library is not writable.")
+        editor = QueueEditorDialog(
+            queue,
+            self._houdini_window(),
+            save_handler=save_handler,
+            existing_queue=existing_queue,
+        )
+        editor.setWindowFlag(QtCore.Qt.WindowType.Window, True)
+        _OPEN_QUEUE_EDITORS[registry_key] = editor
+
+        def release(*_args: Any) -> None:
+            if _OPEN_QUEUE_EDITORS.get(registry_key) is editor:
+                _OPEN_QUEUE_EDITORS.pop(registry_key, None)
+
+        editor.destroyed.connect(release)
+        editor.show()
+        editor.raise_()
+        editor.activateWindow()
+        return editor
+
+    def _new_queue(self) -> Any:
+        from hcq.models import QueueTemplate
+
+        hip_file = ""
+        hou_module = value(self.manager, "hou")
+        hip = getattr(hou_module, "hipFile", None)
+        try:
+            if hip is not None and not hip.isNewFile():
+                hip_file = str(hip.path())
+        except Exception:
+            pass
+        return QueueTemplate(hip_file=hip_file)
+
+    def _new(self) -> QueueEditorDialog:
+        return self._open_editor(
+            self._new_queue(), "new", existing_queue=False
+        )
+
+    def _edit(self) -> QueueEditorDialog | None:
         queue = self.table.current_object()
         if queue is None:
-            return
-        dialog = QueueEditorDialog(queue, self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            if bool(dialog.property("saveAs")):
-                from hcq.utils import new_id
+            return None
+        return self._open_editor(
+            queue,
+            f"edit:{_identifier(queue)}",
+            existing_queue=True,
+        )
 
-                dialog.queue.id = new_id("queue")
-                for job in sequence(item_value(dialog.queue, "jobs", [])):
-                    job.id = new_id("job")
-            call(self.manager, "update_queue", dialog.queue)
-            self.refresh()
-
-    def _duplicate(self) -> None:
+    def _duplicate(self) -> QueueEditorDialog | None:
         queue = self.table.current_object()
-        if queue is not None:
-            call(self.manager, "duplicate_queue", _identifier(queue))
-            self.refresh()
+        if queue is None:
+            return None
+        duplicate = getattr(queue, "duplicate", None)
+        if callable(duplicate):
+            candidate = duplicate()
+        else:
+            from hcq.models import QueueTemplate
+
+            candidate = QueueTemplate.from_dict(mapping(queue)).duplicate()
+        return self._open_editor(
+            candidate,
+            f"duplicate:{_identifier(queue)}",
+            existing_queue=False,
+        )
 
     def _delete(self) -> None:
         queues = self.table.selected_objects()
@@ -683,22 +853,76 @@ class RunTab(QtWidgets.QWidget):
             call(self.manager, "remove_run_queue", row)
         self.refresh()
 
-    def _edit_overrides(self) -> None:
+    def _edit_overrides(self) -> QueueEditorDialog | None:
         row = self.table.currentRow()
         queues = self._queues()
         if not (0 <= row < len(queues)):
             show_warning(self, text.NO_SELECTION)
-            return
-        dialog = QueueEditorDialog(queues[row], self)
-        dialog.setWindowTitle(text.TEMPORARY_OVERRIDES)
-        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
-            return
-        run_list = value(self.manager, "run_list")
-        target = value(run_list, "queues")
-        if isinstance(target, list) and row < len(target):
-            target[row] = dialog.queue
-            call(self.manager, "notify_changed", "run_list")
-            self.refresh()
+            return None
+        source = queues[row]
+        source_id = _identifier(source) or str(id(source))
+        registry_key = (
+            id(self.manager),
+            f"override:{source_id}:{id(source)}",
+        )
+        existing = _OPEN_QUEUE_EDITORS.get(registry_key)
+        if existing is not None:
+            try:
+                existing.show()
+                existing.raise_()
+                existing.activateWindow()
+                return existing
+            except RuntimeError:
+                _OPEN_QUEUE_EDITORS.pop(registry_key, None)
+
+        manager = self.manager
+
+        def save_override(candidate: Any) -> None:
+            run_list = value(manager, "run_list")
+            target = value(run_list, "queues")
+            if not isinstance(target, list):
+                raise RuntimeError("The Run List is not writable.")
+            index = next(
+                (
+                    position
+                    for position, queue in enumerate(target)
+                    if queue is source
+                ),
+                -1,
+            )
+            if index < 0:
+                raise RuntimeError("The queue is no longer in the Run List.")
+            target[index] = candidate
+            call(manager, "notify_changed", "run_list")
+
+        hou_module = value(self.manager, "hou")
+        qt_namespace = getattr(hou_module, "qt", None)
+        main_window = getattr(qt_namespace, "mainWindow", None)
+        try:
+            parent = main_window() if callable(main_window) else None
+        except Exception:
+            parent = None
+        if not isinstance(parent, QtWidgets.QWidget):
+            parent = self.window()
+        editor = QueueEditorDialog(
+            source,
+            parent,
+            save_handler=save_override,
+            existing_queue=False,
+        )
+        editor.setWindowTitle(text.TEMPORARY_OVERRIDES)
+        editor.setWindowFlag(QtCore.Qt.WindowType.Window, True)
+        _OPEN_QUEUE_EDITORS[registry_key] = editor
+
+        def release(*_args: Any) -> None:
+            if _OPEN_QUEUE_EDITORS.get(registry_key) is editor:
+                _OPEN_QUEUE_EDITORS.pop(registry_key, None)
+
+        editor.destroyed.connect(release)
+        editor.show()
+        editor.raise_()
+        editor.activateWindow()
+        return editor
 
     def _clear(self) -> None:
         for row in range(len(self._queues()) - 1, -1, -1):
@@ -785,15 +1009,25 @@ class HistoryTab(QtWidgets.QWidget):
         self.details.setMaximumHeight(170)
         self.table.itemSelectionChanged.connect(self._show_details)
         layout.addWidget(self.details)
-        buttons = [
+        primary_buttons = [
             make_button(text.RUN_AGAIN, lambda: self._action("run_history")),
             make_button(text.RUN_FAILED, lambda: self._action("run_failed_jobs")),
             make_button(text.RUN_FROM_FAILED, lambda: self._action("run_from_failed_job")),
             make_button(text.RESTORE_RUN_LIST, lambda: self._action("restore_history")),
-            make_button(text.EXPORT_RESULT, self._export),
-            make_button(text.GO_TO_NODE, lambda: self._action("go_to_history_node")),
         ]
-        layout.addLayout(compact_button_row(*buttons))
+        navigation_buttons = [
+            make_button(text.EXPORT_RESULT, self._export),
+            make_button(text.GO_TO_NODE, self._go_to_node),
+        ]
+        for button in navigation_buttons:
+            button.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Maximum,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+        primary_row = compact_button_row(*primary_buttons)
+        primary_row.setSpacing(3)
+        layout.addLayout(primary_row)
+        layout.addLayout(compact_button_row(*navigation_buttons))
         self.refresh()
 
     def refresh(self) -> None:
@@ -851,6 +1085,20 @@ class HistoryTab(QtWidgets.QWidget):
         if result is None:
             show_warning(self, "This history action is not available.")
 
+    def _go_to_node(self) -> None:
+        session = self.table.current_object()
+        if session is None:
+            return
+        session_id = item_value(
+            session, "session_id", item_value(session, "id", "")
+        )
+        result = call(self.manager, "go_to_history_node", session_id)
+        _show_navigation_result(
+            self,
+            result,
+            "Could not navigate to a node from this history session.",
+        )
+
     def _export(self) -> None:
         session = self.table.current_object()
         if session is None:
@@ -890,6 +1138,14 @@ class SettingsTab(QtWidgets.QWidget):
         self.minimum_duration.setSuffix(" s")
         self.suppress_playback = QtWidgets.QCheckBox("Suppress During Playback")
         self.merge_notifications = QtWidgets.QCheckBox("Merge Rapid Notifications")
+        self.windows_notifications = QtWidgets.QCheckBox(
+            "Enable Windows Notifications"
+        )
+        self.windows_notification_status = QtWidgets.QLabel()
+        windows_notification_row = QtWidgets.QHBoxLayout()
+        windows_notification_row.addWidget(self.windows_notifications)
+        windows_notification_row.addWidget(self.windows_notification_status)
+        windows_notification_row.addStretch(1)
         self.save_behavior = QtWidgets.QComboBox()
         for label, data in (
             ("Always Save", "always"),
@@ -946,6 +1202,7 @@ class SettingsTab(QtWidgets.QWidget):
             ("Minimum Cook Duration", self.minimum_duration),
             ("Playback", self.suppress_playback),
             ("Notifications", self.merge_notifications),
+            ("Windows Notifications", windows_notification_row),
             ("Save Before Running", self.save_behavior),
             ("HIP Backup", self.backup),
             ("Default CPU", default_cpu_row),
@@ -963,6 +1220,7 @@ class SettingsTab(QtWidgets.QWidget):
         outer.addLayout(
             compact_button_row(
                 make_button(text.SAVE, self._save, object_name="hcqPrimaryButton"),
+                make_button("Test Notification", self._test_notification),
                 make_button("Restore Defaults", self._restore_defaults),
             )
         )
@@ -986,6 +1244,14 @@ class SettingsTab(QtWidgets.QWidget):
         )
         self.merge_notifications.setChecked(
             bool(get("merge_rapid_notifications", True))
+        )
+        self.windows_notifications.setChecked(
+            bool(get("windows_notifications_enabled", False))
+        )
+        notifications = value(self.manager, "notifications")
+        available = call(notifications, "windows_available", default=False)
+        self.windows_notification_status.setText(
+            "Available" if available else "Unavailable"
         )
         self._set_combo(self.save_behavior, get("save_before_running", "always"))
         self.backup.setChecked(
@@ -1024,6 +1290,9 @@ class SettingsTab(QtWidgets.QWidget):
                 "minimum_cook_duration_seconds": self.minimum_duration.value(),
                 "suppress_monitor_during_playback": self.suppress_playback.isChecked(),
                 "merge_rapid_notifications": self.merge_notifications.isChecked(),
+                "windows_notifications_enabled": (
+                    self.windows_notifications.isChecked()
+                ),
                 "save_before_running": self.save_behavior.currentData(),
                 "create_backup_before_saving": self.backup.isChecked(),
                 "default_cpu": cpu,
@@ -1038,6 +1307,42 @@ class SettingsTab(QtWidgets.QWidget):
         )
         call(self.manager, "save_settings")
         call(self.manager, "notify_changed", "settings")
+
+    def _test_notification(self) -> None:
+        self._save()
+        notifications = value(self.manager, "notifications")
+        result = call(
+            notifications,
+            ("test_notification", "send_test_notification"),
+        )
+        if result is None:
+            show_warning(self, "The notification service is not available.")
+            return
+        wants_windows = self.windows_notifications.isChecked()
+        QtCore.QTimer.singleShot(
+            250,
+            lambda current=result, requested=wants_windows: (
+                self._finish_notification_test(current, requested)
+            ),
+        )
+
+    def _finish_notification_test(
+        self,
+        notification: Any,
+        wants_windows: bool,
+    ) -> None:
+        if not wants_windows:
+            self.windows_notification_status.setText("In-app test sent")
+            return
+        delivery = mapping(item_value(notification, "delivery", {}))
+        if bool(delivery.get("windows", False)):
+            self.windows_notification_status.setText(
+                "Test sent (Windows may suppress display)"
+            )
+        else:
+            self.windows_notification_status.setText(
+                "Windows test failed; in-app fallback used"
+            )
 
     def _sync_cpu_value(self) -> None:
         self.default_cpu_value.setEnabled(
