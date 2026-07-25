@@ -9,6 +9,32 @@ another Houdini process, or create helper nodes.
 
 Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
+## Download
+
+[![Download HCQ for Windows](https://img.shields.io/badge/Download-HCQ_for_Windows-2ea44f?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Taiyo1031/HCQ/archive/refs/heads/main.zip)
+[![Release Downloads](https://img.shields.io/badge/View-Release_Downloads-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases)
+[![Download Houdini](https://img.shields.io/badge/Get-Houdini_21.0+-ff4713?style=for-the-badge)](https://www.sidefx.com/download/)
+
+### What you need
+
+| Required download | What to choose |
+| --- | --- |
+| **HCQ** | Click the green **Download HCQ for Windows** button above. |
+| **Houdini** | Houdini 21.0 or later for Windows. Skip this if it is already installed. |
+| **Python / PySide6** | Nothing. HCQ uses the versions bundled with Houdini. |
+
+The green button downloads the current `main` branch as `HCQ-main.zip` and
+works even before a GitHub Release is published. When a packaged release is
+available, you can instead open **Release Downloads** and download only:
+
+```text
+HCQ-<version>-windows.zip
+HCQ-<version>-windows.zip.sha256  (optional checksum)
+```
+
+Do not download GitHub's automatically generated **Source code** archives from
+the Releases page when a packaged Windows ZIP is available.
+
 ## Requirements
 
 - Windows 11
@@ -17,13 +43,12 @@ Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
 No third-party Python package is required at runtime.
 
-## Installation
+## Quick installation
 
-### Install the release archive
+### Option A — Install the green-button download
 
 1. Close Houdini.
-2. Download `HCQ-1.1.0-windows.zip`, or build it with
-   `python tools/build_release.py`.
+2. Click **Download HCQ for Windows** above and extract `HCQ-main.zip`.
 3. Find your Houdini user preference directory. For Houdini 21.0 on Windows,
    the default location is:
 
@@ -31,8 +56,26 @@ No third-party Python package is required at runtime.
    C:\Users\<you>\Documents\houdini21.0
    ```
 
-4. Extract the **contents** of the ZIP directly into that directory. Do not
-   add another `HCQ-1.1.0-windows` wrapper folder.
+4. Open the extracted `HCQ-main` folder.
+5. Copy these two folders directly into the Houdini user preference directory:
+
+   ```text
+   HCQ-main\HCQ       → C:\Users\<you>\Documents\houdini21.0\HCQ
+   HCQ-main\packages  → C:\Users\<you>\Documents\houdini21.0\packages
+   ```
+
+6. Start Houdini 21.0 or later.
+7. Click **HCQ** on the HCQ shelf. If the shelf is not visible, use the shelf
+   `+` menu to show **HCQ**.
+
+### Option B — Install a packaged Windows release
+
+1. Close Houdini.
+2. Open **Release Downloads** above.
+3. Download `HCQ-<version>-windows.zip`. The `.sha256` file is optional and is
+   provided for integrity verification.
+4. Extract the **contents** of the Windows ZIP directly into the Houdini user
+   preference directory. Do not add another version-named wrapper folder.
 5. Confirm that the installed layout contains:
 
    ```text
@@ -45,6 +88,8 @@ No third-party Python package is required at runtime.
 6. Start Houdini 21.0 or later.
 7. Click **HCQ** on the HCQ shelf, or create a Python Panel and choose
    **HCQ — Houdini Cook Queue**.
+
+### Confirm that HCQ is installed
 
 If HCQ does not appear, confirm that `hcq.json` is inside the Houdini
 `packages` directory and that its sibling `HCQ` directory was extracted at the
