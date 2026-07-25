@@ -1,0 +1,12 @@
+{
+  "enable": "houdini_version >= '21.0' and houdini_os == 'windows'",
+  "load_package_once": true,
+  "process_order": 100,
+  "show": true,
+  "env": [
+    {
+      "HCQ_ROOT": "$HOUDINI_PACKAGE_PATH/../HCQ"
+    }
+  ],
+  "hpath": "$HCQ_ROOT"
+}

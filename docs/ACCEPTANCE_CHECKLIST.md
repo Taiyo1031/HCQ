@@ -1,0 +1,148 @@
+# HCQ 1.0 Acceptance Checklist
+
+## Automated validation recorded on 2026-07-25
+
+- [x] 25 dependency-free unit tests pass.
+- [x] Houdini 21.0.729 integration checks pass for Generic SOP, File Cache,
+  ROP, TOP, Button, CPU restoration, and Monitor rename tracking.
+- [x] PySide6 offscreen smoke checks pass for all five tabs, Queue CPU,
+  Settings CPU, Import Preview, and Missing Node resolution widgets.
+- [x] Shelf and Python Panel XML validate against the SideFX Houdini 21.0
+  XSD files.
+- [x] `HCQ-1.0.0-windows.zip` loads `hcq` 1.0.0 through its Package JSON
+  from clean temporary Houdini preferences.
+
+The remaining unchecked items require an interactive Houdini UI session,
+project-specific assets, performance workloads, or manual visual confirmation.
+
+## Installation and UI
+
+- [ ] Package JSON loads without startup errors in Houdini 21.0.729.
+- [ ] The HCQ shelf and shelf tool appear.
+- [ ] The Python Panel opens docked and as a floating pane.
+- [ ] Monitor, Queues, Run, History, and Settings tabs are usable.
+
+## Cook Monitor
+
+- [ ] Add selected nodes and add by path.
+- [ ] Enable or disable monitoring globally and per node.
+- [ ] Detect generic, ROP, and TOP completion.
+- [ ] Detect warnings, errors, rename, and deletion.
+- [ ] Suppress playback notifications and duplicate notifications.
+- [ ] Suspend during Queue Runner and refresh baselines before resuming.
+
+## Queue management
+
+- [ ] Create, edit, duplicate, rename, delete, group, and favorite queues.
+- [ ] Add, reorder, duplicate, disable, and remove jobs.
+- [ ] Preserve temporary Run List overrides without changing templates.
+- [ ] Import and export schema-versioned JSON without automatic execution.
+- [ ] Remap file paths and resolve missing node paths.
+
+## Queue Runner
+
+- [ ] File Cache foreground Save to Disk.
+- [ ] ROP render, TOP cook, generic force cook, and button parameter.
+- [ ] Multiple queues and jobs run in displayed order, one at a time.
+- [ ] Preflight detects all required error and warning conditions.
+- [ ] Stop, skip, wait-for-user, retry, pause-after-job, and cancel behavior.
+- [ ] CPU setting is restored after success, warning, failure, cancellation, and exception.
+- [ ] Active status updates on every state transition.
+- [ ] Completion and failure are recorded in History.
+
+## HIP, output, and recovery
+
+- [ ] Always Save, Ask Every Time, Do Not Save, Save As, and backup.
+- [ ] HIP mismatch never opens another file silently.
+- [ ] Basic verification checks operation result, errors, size, and modification time.
+- [ ] Interrupted runs are detected and can be inspected, retried, restarted, completed, or archived.
+- [ ] Existing output Ask, Overwrite, Stop, and Skip decisions work.
+
+## Performance
+
+- [ ] Short, medium, long, simulation, and disk-heavy benchmarks recorded.
+- [ ] Long-running foreground operations normally stay within the 1–3% overhead target.
+- [ ] Monitor polls registered nodes only and does not scan the scene.
+
+## Required specification test matrix
+
+### Generic Operation
+
+- [x] One generic SOP node.
+- [ ] Multiple generic SOP nodes.
+- [ ] Node warning.
+- [ ] Node error.
+- [ ] Node deletion.
+- [x] Node rename.
+
+### File Cache
+
+- [x] Single frame.
+- [ ] Frame range.
+- [ ] Simulation enabled.
+- [ ] Simulation disabled.
+- [ ] Existing cache overwrite.
+- [ ] Missing output directory.
+- [ ] Read-only output directory.
+- [ ] Cancelled cook.
+- [ ] Failed cook.
+- [ ] Consecutive connected File Cache nodes.
+
+### ROP
+
+- [x] Single-frame successful render.
+- [ ] Frame range.
+- [ ] Failed render.
+- [ ] Cancelled render.
+
+### TOP and PDG
+
+- [x] Successful TOP cook.
+- [ ] Failed TOP cook.
+- [ ] Cancelled TOP cook.
+- [ ] Cached work items.
+- [ ] In-process work items.
+- [ ] Out-of-process work items.
+
+### Queue Management
+
+- [ ] One queue.
+- [ ] Multiple queues.
+- [ ] Disabled job.
+- [ ] Temporary job override.
+- [x] Queue duplicate model behavior.
+- [ ] JSON import through the interactive UI.
+- [ ] JSON export through the interactive UI.
+- [ ] Missing imported HIP.
+- [x] Missing imported node resolution widget.
+- [x] File-system path replacement.
+
+### HIP Save
+
+- [ ] Saved HIP.
+- [ ] Dirty HIP.
+- [ ] Unsaved untitled HIP.
+- [ ] Save permission failure.
+- [ ] Queue HIP mismatch.
+- [ ] Backup enabled.
+- [ ] Backup disabled.
+
+### CPU
+
+- [x] Current setting.
+- [x] All threads.
+- [x] One thread.
+- [x] Fixed thread limit.
+- [x] Reserved threads.
+- [x] Invalid imported thread count.
+- [x] Exception during job.
+- [ ] Cancellation during job in interactive Houdini.
+
+### Recovery
+
+- [ ] Houdini closes between jobs.
+- [ ] Houdini crashes during a job.
+- [ ] Status JSON is incomplete.
+- [x] Output files exist while job status remains interrupted.
+- [x] Retry interrupted job.
+- [x] Restart full queue.

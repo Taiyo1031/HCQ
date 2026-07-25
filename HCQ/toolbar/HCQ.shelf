@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <toolshelf name="hcq" label="HCQ">
+    <memberTool name="hcq_open_panel"/>
+  </toolshelf>
+  <tool name="hcq_open_panel" label="HCQ" icon="HCQ">
+    <helpText>Open the HCQ — Houdini Cook Queue panel.</helpText>
+    <script scriptType="python"><![CDATA[
+from hcq.app import open_panel
+
+open_panel()
+]]></script>
+  </tool>
+</shelfDocument>

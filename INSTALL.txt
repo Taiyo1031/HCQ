@@ -1,0 +1,32 @@
+HCQ 1.0.0 — Windows Installation
+================================
+
+Requirements
+------------
+
+- Windows 11
+- Houdini 21.0 or later
+
+Installation
+------------
+
+1. Close Houdini.
+2. Open your Houdini user preference directory, normally:
+   C:\Users\<you>\Documents\houdini21.0
+3. Extract the contents of HCQ-1.0.0-windows.zip into that directory.
+4. Confirm these paths exist:
+   <houdini user preference directory>\packages\hcq.json
+   <houdini user preference directory>\HCQ\python3.11libs\hcq
+5. Start Houdini.
+6. Open the HCQ shelf and click HCQ, or create a Python Panel and choose
+   "HCQ — Houdini Cook Queue".
+
+Uninstallation
+--------------
+
+1. Close Houdini.
+2. Remove packages\hcq.json from the Houdini user preference directory.
+3. Remove the HCQ plug-in directory.
+4. Optional: remove the HCQ data directory to delete settings and history.
+
+HCQ does not install third-party Python packages.

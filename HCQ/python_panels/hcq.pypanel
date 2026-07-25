@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pythonPanelDocument>
+  <interface name="hcq" label="HCQ — Houdini Cook Queue" icon="HCQ">
+    <script><![CDATA[
+from hcq.app import create_panel
+
+
+def onCreateInterface():
+    return create_panel()
+]]></script>
+    <includeInToolbarMenu menu_position="1000" create_separator="false"/>
+  </interface>
+</pythonPanelDocument>
