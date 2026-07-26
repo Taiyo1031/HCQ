@@ -57,7 +57,10 @@ class InstallationTests(unittest.TestCase):
                 base / "Program B",
                 environment={"LOCALAPPDATA": str(base / "Local Data")},
             )
-            self.assertEqual(first.parent.parent, (base / "Local Data" / "HCQ"))
+            self.assertEqual(
+                first.parent.parent,
+                (base / "Local Data" / "HCQ").resolve(),
+            )
             self.assertNotEqual(first, second)
 
     def test_installation_modes(self):
