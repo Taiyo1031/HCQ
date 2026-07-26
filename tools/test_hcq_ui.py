@@ -71,7 +71,7 @@ class FakeUpdater:
         self.calls += 1
         return SimpleNamespace(
             status="up_to_date",
-            message="HCQ 1.1.2 is up to date.",
+            message="HCQ 1.2.0 is up to date.",
             release_url="https://github.com/Taiyo1031/HCQ/releases/latest",
         )
 
@@ -144,6 +144,23 @@ def main() -> None:
     assert manager.updater.calls == 1
     assert panel.update_button.isEnabled()
     assert panel.update_button.text() == "Update"
+    restart_offers = []
+    panel._offer_update_restart = (
+        lambda result, release_url: restart_offers.append(
+            (result.status, release_url)
+        )
+    )
+    panel._update_finished(
+        SimpleNamespace(
+            status="ready",
+            message="Update ready.",
+            release_url="https://example.test/release",
+            restart_required=True,
+        )
+    )
+    assert restart_offers == [
+        ("ready", "https://example.test/release")
+    ]
     panel.resize(520, 520)
     app.processEvents()
     for button, label in (

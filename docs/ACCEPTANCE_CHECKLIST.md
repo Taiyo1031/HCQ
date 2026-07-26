@@ -1,8 +1,8 @@
-# HCQ 1.1.2 Acceptance Checklist
+# HCQ 1.2.0 Acceptance Checklist
 
 ## Automated validation recorded on 2026-07-26
 
-- [x] 59 dependency-free unit tests pass.
+- [x] 71 dependency-free unit tests pass.
 - [x] Houdini 21.0.729 integration checks pass for Generic SOP, File Cache,
   ROP, TOP, Button, CPU restoration, and Monitor rename tracking.
 - [x] PySide6 offscreen smoke checks pass for all five tabs, modeless Queue
@@ -11,9 +11,19 @@
   Preview, and Missing Node resolution widgets.
 - [x] Shelf and Python Panel XML validate against the SideFX Houdini 21.0
   XSD files.
-- [x] `HCQ-1.1.2-windows.zip` and SHA-256 validate, and the archive loads
-  `hcq` 1.1.2 through its Package JSON
-  from clean temporary Houdini preferences.
+- [x] `HCQ-1.2.0-windows.zip` and
+  `HCQ-1.2.0-houdini-package.zip` validate and load `hcq` 1.2.0 through
+  their respective Package JSON layouts from clean temporary preferences.
+- [x] `HCQ-Setup-1.2.0.exe` compiles with Inno Setup 6.7, has a valid PE
+  header and SHA-256 contract, and contains the same verified HCQ payload.
+- [x] Legacy migration tests preserve settings and modified files while
+  backing up and removing only unchanged manifest-owned plug-in files.
+- [x] Migration from the actual `HCQ-1.1.2-windows.zip` preserves settings,
+  Queue Library, run history, logs, and recovery data under a temporary
+  OneDrive-style path containing spaces and Japanese characters.
+- [x] Restart tests cover active Queue refusal, another-Houdini refusal,
+  save-prompt cancellation, helper launch, installer sequencing, and HIP
+  relaunch arguments.
 - [x] Updater validates release manifests, detects development checkouts,
   rejects checksum mismatches, preserves user data, and rolls back failures.
 - [x] Notification tests cover duration suppression reasons, live settings,
@@ -24,6 +34,11 @@ project-specific assets, performance workloads, or manual visual confirmation.
 
 ## Installation and UI
 
+- [ ] Run the unsigned Setup EXE on a machine whose Application Control policy
+  permits unsigned local installers.
+- [ ] Setup new install, repair, default uninstall, and opt-in data removal.
+- [ ] Setup registers Documents/OneDrive and user-profile Houdini 21.x paths.
+- [x] Upgrade an actual 1.1.2 copy install and confirm all user data remains.
 - [ ] Package JSON loads without startup errors in Houdini 21.0.729.
 - [ ] The HCQ shelf and shelf tool appear.
 - [ ] The Python Panel opens docked and as a floating pane.

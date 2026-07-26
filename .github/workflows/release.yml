@@ -1,0 +1,94 @@
+name: HCQ Windows Distribution
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile Python sources
+        run: python -m compileall -q HCQ tools tests
+
+      - name: Build release assets
+        shell: pwsh
+        env:
+          HCQ_SIGNING_CERT_BASE64: ${{ secrets.HCQ_SIGNING_CERT_BASE64 }}
+          HCQ_SIGNING_CERT_PASSWORD: ${{ secrets.HCQ_SIGNING_CERT_PASSWORD }}
+        run: |
+          $arguments = @("tools/build_release.py", "--output", "dist")
+          if ($env:HCQ_SIGNING_CERT_BASE64 -and $env:HCQ_SIGNING_CERT_PASSWORD) {
+            $certificate = Join-Path $env:RUNNER_TEMP "hcq-signing.pfx"
+            [IO.File]::WriteAllBytes(
+              $certificate,
+              [Convert]::FromBase64String($env:HCQ_SIGNING_CERT_BASE64)
+            )
+            $signCommand = "signtool.exe sign /fd SHA256 /f `"$certificate`" /p `"$env:HCQ_SIGNING_CERT_PASSWORD`" /tr http://timestamp.digicert.com /td SHA256 `$f"
+            $arguments += @("--sign-command", $signCommand)
+          }
+          python @arguments
+
+      - name: Validate distribution contracts
+        run: python tools/test_release_install.py --dist dist --skip-houdini
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HCQ-Windows-${{ github.sha }}
+          path: |
+            dist/HCQ-Setup-*.exe
+            dist/HCQ-Setup-*.exe.sha256
+            dist/HCQ-*-houdini-package.zip
+            dist/HCQ-*-houdini-package.zip.sha256
+            dist/HCQ-*-windows.zip
+            dist/HCQ-*-windows.zip.sha256
+          if-no-files-found: error
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = python -c "import sys; sys.path.insert(0, 'HCQ/python3.11libs'); from hcq.constants import VERSION; print(VERSION)"
+          if ($tag -ne "v$version") {
+            throw "Tag $tag does not match HCQ $version."
+          }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists; refusing to overwrite it."
+          }
+          gh release create $tag `
+            --verify-tag `
+            --title "HCQ $version" `
+            --generate-notes `
+            --latest `
+            dist/HCQ-Setup-$version.exe `
+            dist/HCQ-Setup-$version.exe.sha256 `
+            dist/HCQ-$version-houdini-package.zip `
+            dist/HCQ-$version-houdini-package.zip.sha256 `
+            dist/HCQ-$version-windows.zip `
+            dist/HCQ-$version-windows.zip.sha256
+    permissions:
+      contents: write

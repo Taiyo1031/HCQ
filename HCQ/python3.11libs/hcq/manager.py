@@ -6,6 +6,8 @@ import copy
 from pathlib import Path
 from typing import Any, Callable
 
+from hcq_installation import RuntimeInstanceLock, shared_updates_root
+
 from .constants import VERSION
 from .cook_monitor import CookMonitor
 from .import_export import export_queues, import_queues
@@ -15,6 +17,7 @@ from .navigation import HoudiniNavigation
 from .notifications import NotificationCenter, WindowsNotificationPresenter
 from .queue_runner import QueueRunner
 from .recovery import RecoveryService
+from .restart import restart_houdini
 from .storage import Storage, atomic_write_json, default_storage_root
 from .updater import UpdateService
 from .utils import new_id, now_iso
@@ -32,7 +35,18 @@ class HCQManager:
         self.storage = Storage(default_storage_root(hou_module), version)
         self.logger = configure_logging(self.storage.paths.logs)
         self.settings = self.storage.load_settings()
-        self.updater = UpdateService(self.storage.paths.root)
+        self.install_root = Path(__file__).resolve().parents[2]
+        self.update_state_root = shared_updates_root(
+            self.install_root,
+            fallback=self.storage.paths.root.parent,
+        )
+        self.updater = UpdateService(
+            self.storage.paths.root,
+            install_root=self.install_root,
+            updates_root=self.update_state_root,
+        )
+        self._runtime_instance = RuntimeInstanceLock(self.update_state_root)
+        self._runtime_lock_acquired = False
         self.queues = self.storage.load_queues()
         self.run_list = RunList(
             save_before_running=str(self.settings.get("save_before_running", "always")),
@@ -97,6 +111,13 @@ class HCQManager:
             return
         self._started = True
         try:
+            self._runtime_instance.acquire()
+            self._runtime_lock_acquired = True
+        except Exception:
+            self.logger.exception(
+                "Could not register this HCQ runtime for update coordination."
+            )
+        try:
             self.hou.hipFile.addEventCallback(self._hip_event)
             self._hip_callback_registered = True
         except Exception:
@@ -121,6 +142,9 @@ class HCQManager:
 
     def shutdown(self) -> None:
         if not self._started:
+            if self._runtime_lock_acquired:
+                self._runtime_instance.release()
+                self._runtime_lock_acquired = False
             return
         self._started = False
         try:
@@ -141,6 +165,15 @@ class HCQManager:
             self.notifications.clear()
         except Exception:
             pass
+        if self._runtime_lock_acquired:
+            self._runtime_instance.release()
+            self._runtime_lock_acquired = False
+
+    def restart_for_update(self, result: Any) -> bool:
+        return restart_houdini(
+            self,
+            installer_path=str(getattr(result, "installer_path", "")),
+        )
 
     def add_listener(self, callback: Listener) -> Callable[[], None]:
         if callback not in self._listeners:

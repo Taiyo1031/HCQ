@@ -5,7 +5,7 @@
   "show": true,
   "env": [
     {
-      "HCQ_ROOT": "$HOUDINI_PACKAGE_PATH/../HCQ"
+      "HCQ_ROOT": "$LOCALAPPDATA/Programs/HCQ"
     }
   ],
   "hpath": "$HCQ_ROOT"

@@ -13,92 +13,98 @@ Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
 - [Fix Backlog](docs/FIX_BACKLOG.md)
 - [Acceptance Checklist](docs/ACCEPTANCE_CHECKLIST.md)
+- [Distribution Guide](docs/DISTRIBUTION.md)
 - [JSON Format](docs/JSON_FORMAT.md)
 
 ## Download
 
-[![Download HCQ for Windows](https://img.shields.io/badge/Download-HCQ_for_Windows-2ea44f?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Taiyo1031/HCQ/archive/refs/heads/main.zip)
+[![Download HCQ Setup](https://img.shields.io/badge/Download-HCQ_Setup-2ea44f?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-Setup-1.2.0.exe)
+[![Houdini Package Archive](https://img.shields.io/badge/Download-Houdini_Package-8250df?style=for-the-badge&logo=sidefx&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-1.2.0-houdini-package.zip)
 [![Release Downloads](https://img.shields.io/badge/View-Release_Downloads-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases)
 
 ### What you need
 
 | Required download | What to choose |
 | --- | --- |
-| **HCQ** | Click the green **Download HCQ for Windows** button above. |
-| **Houdini** | Houdini 21.0 or later for Windows. Skip this if it is already installed. |
+| **HCQ** | Click the green **Download HCQ Setup** button. |
+| **Houdini** | Houdini 21.x for Windows. Skip this if it is already installed. |
 | **Python / PySide6** | Nothing. HCQ uses the versions bundled with Houdini. |
 
-The green button downloads the current `main` branch as `HCQ-main.zip` and
-works even before a GitHub Release is published. When a packaged release is
-available, you can instead open **Release Downloads** and download only:
+The Windows Setup is the recommended installation. It needs no administrator
+access and registers the same HCQ installation with every detected Houdini
+21.x version. Advanced users can use Houdini's Package Browser with the purple
+Package Archive button.
 
 ```text
-HCQ-<version>-windows.zip
-HCQ-<version>-windows.zip.sha256  (optional checksum)
+HCQ-Setup-<version>.exe
+HCQ-<version>-houdini-package.zip
+HCQ-<version>-windows.zip          (legacy updater bridge)
 ```
 
-Do not download GitHub's automatically generated **Source code** archives from
-the Releases page when a packaged Windows ZIP is available.
+Each file has a matching `.sha256` download. Do not use GitHub's automatically
+generated **Source code** archives for a normal installation.
 
 ## Requirements
 
 - Windows 11
-- Houdini 21.0 or later
+- Houdini 21.x
 - Houdini's bundled Python 3.11 and PySide6
 
 No third-party Python package is required at runtime.
 
 ## Quick installation
 
-### Option A — Install the green-button download
+### Option A — Windows Setup (recommended)
 
 1. Close Houdini.
-2. Click **Download HCQ for Windows** above and extract `HCQ-main.zip`.
-3. Find your Houdini user preference directory. For Houdini 21.0 on Windows,
-   the default location is:
-
-   ```text
-   C:\Users\<you>\Documents\houdini21.0
-   ```
-
-4. Open the extracted `HCQ-main` folder.
-5. Copy these two folders directly into the Houdini user preference directory:
-
-   ```text
-   HCQ-main\HCQ       → C:\Users\<you>\Documents\houdini21.0\HCQ
-   HCQ-main\packages  → C:\Users\<you>\Documents\houdini21.0\packages
-   ```
-
-6. Start Houdini 21.0 or later.
-7. Click **HCQ** on the HCQ shelf. If the shelf is not visible, use the shelf
+2. Download and run `HCQ-Setup-<version>.exe`.
+3. Keep the default current-user installation.
+4. Start Houdini 21.x.
+5. Click **HCQ** on the HCQ shelf. If the shelf is not visible, use the shelf
    `+` menu to show **HCQ**.
 
-### Option B — Install a packaged Windows release
+Setup installs the plug-in at:
 
-1. Close Houdini.
-2. Open **Release Downloads** above.
-3. Download `HCQ-<version>-windows.zip`. The `.sha256` file is optional and is
-   provided for integrity verification.
-4. Extract the **contents** of the Windows ZIP directly into the Houdini user
-   preference directory. Do not add another version-named wrapper folder.
-5. Confirm that the installed layout contains:
+```text
+%LOCALAPPDATA%\Programs\HCQ
+```
 
-   ```text
-   $HOUDINI_USER_PREF_DIR/packages/hcq.json
-   $HOUDINI_USER_PREF_DIR/HCQ/python3.11libs/hcq
-   $HOUDINI_USER_PREF_DIR/HCQ/python_panels/hcq.pypanel
-   $HOUDINI_USER_PREF_DIR/HCQ/toolbar/HCQ.shelf
-   ```
+Only a small `packages/hcq.json` registration is added to the Houdini
+preference folders. HCQ also registers the user-profile preference path used
+by `hython`, so both graphical and command-line Houdini load the same code.
 
-6. Start Houdini 21.0 or later.
-7. Click **HCQ** on the HCQ shelf, or create a Python Panel and choose
-   **HCQ — Houdini Cook Queue**.
+### Option B — Houdini Package Browser
+
+1. Download `HCQ-<version>-houdini-package.zip`.
+2. In Houdini, create or switch a pane to **Inspectors ▸ Package Browser**.
+3. Choose **File ▸ Install Package Archive...**.
+4. Select the downloaded ZIP and an installation folder.
+5. Accept the installation, then open the HCQ shelf or Python Panel.
+
+The archive contains a root-level `hcq.json` and an `HCQ` content folder as
+required by Houdini's Package Browser. It can be installed without manually
+copying files into Documents.
+
+### Upgrade from HCQ 1.1.x
+
+Running Windows Setup automatically detects the former copy-installed layout.
+Files declared by the old release manifest are backed up and removed, while
+settings, Queue Library data, history, logs, and recovery data remain in:
+
+```text
+$HOUDINI_USER_PREF_DIR\HCQ
+```
+
+The legacy `HCQ-<version>-windows.zip` remains available so the 1.1.2 Update
+button can reach 1.2.0. After that bridge update, click **Update** again and
+choose **Install and Restart** to move to the standard installation.
 
 ### Confirm that HCQ is installed
 
-If HCQ does not appear, confirm that `hcq.json` is inside the Houdini
-`packages` directory and that its sibling `HCQ` directory was extracted at the
-same level. Restart Houdini after correcting the layout.
+If HCQ does not appear, open Package Browser and confirm that `hcq.json` is
+enabled without errors. For Setup installations, confirm that
+`%LOCALAPPDATA%\Programs\HCQ` exists. Restart Houdini after correcting a
+Package JSON registration.
 
 ### Load a source checkout for development
 
@@ -115,24 +121,26 @@ Houdini after changing Python, Shelf, Python Panel, or Package files.
 
 ### Update an installed copy
 
-The built-in updater was introduced in HCQ 1.1.0. Install HCQ 1.1.2 manually
-using the archive instructions above. Future updates can be prepared from the
-compact **Update** button in the panel header:
+Use the compact **Update** button in the panel header:
 
 1. Click **Update**.
 2. HCQ checks the latest stable GitHub Release.
 3. The Windows ZIP and its SHA-256 checksum are downloaded and verified.
-4. When **Update Ready** appears, close and restart Houdini.
+4. When **Update Ready** appears, choose **Restart Now** or **Later**.
 
 Only files listed in the release manifest are replaced. Queues, Monitor
 registrations, settings, logs, history, and recovery data are preserved. A
 backup is made before replacement and restored if installation fails.
-If an update changes a Package, Shelf, or Python Panel definition, restart
-Houdini once more after HCQ reports that the update was installed.
 
-If HCQ cannot prove that a failed update was rolled back safely, it stops
-loading and writes `HCQ/updates/UPDATE_RECOVERY_REQUIRED.json`. Restore the
-latest matching folder under `HCQ/updates/backups`, then restart Houdini.
+**Restart Now** refuses to continue while an HCQ queue or another Houdini
+session is using the same installation. Houdini shows its normal unsaved HIP
+prompt. If you confirm the exit, HCQ waits for the old process to close and
+reopens the same saved HIP in the same Houdini edition. Canceling the save
+prompt leaves the staged update untouched.
+
+Update staging, locks, backups, and recovery journals are installation-scoped
+under `%LOCALAPPDATA%\HCQ\updates`. They are shared by graphical Houdini and
+`hython`; project data remains version-specific under Houdini preferences.
 
 Automatic replacement is disabled for Git source checkouts. In that case,
 **Update** links to the release page and the checkout must be updated with Git.
@@ -264,8 +272,7 @@ $HOUDINI_USER_PREF_DIR/HCQ/
 ├─ queues/
 ├─ runs/
 ├─ logs/
-├─ recovery/
-└─ updates/
+└─ recovery/
 ```
 
 An active run is persisted after meaningful state changes. If Houdini closes or
@@ -286,13 +293,14 @@ Run Houdini integration checks:
 powershell -ExecutionPolicy Bypass -File tools/run_houdini_tests.ps1
 ```
 
-Build the Windows archive:
+Build all three Windows distributions with Inno Setup 6 installed:
 
 ```powershell
 python tools/build_release.py
 ```
 
-Validate that the built archive loads from clean temporary Houdini preferences:
+Validate both ZIP layouts and load them from clean temporary Houdini
+preferences:
 
 ```powershell
 python tools/test_release_install.py
@@ -303,13 +311,18 @@ The functional release gate is tracked in
 
 ## Uninstallation
 
-Close Houdini, remove `$HOUDINI_USER_PREF_DIR/packages/hcq.json`, and remove the
-installed `HCQ` plug-in directory. Remove `$HOUDINI_USER_PREF_DIR/HCQ` only if
-you also want to delete saved queues, settings, logs, and run history.
+For a Setup installation, close Houdini and uninstall **HCQ** from Windows
+Installed Apps or the HCQ Start menu folder. The uninstaller removes the
+program and only the Package JSON files owned by Setup. Choose **No** when
+asked about user data to keep queues, settings, logs, history, and recovery.
+
+For a Package Archive installation, use Package Browser to unload/delete the
+HCQ package and remove its selected installation folder. User data is not
+inside that folder.
 
 ## Known limitations
 
-- HCQ 1.1 is supported on Windows only.
+- HCQ 1.2 is supported on Windows 11 and Houdini 21.x only.
 - A foreground Houdini cook may block panel repainting and input.
 - Custom HDA buttons that open modal dialogs are not guaranteed to run
   unattended.

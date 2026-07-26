@@ -199,6 +199,9 @@ class HCQPanel(QtWidgets.QWidget):
             getattr(result, "message", "The update check did not complete.")
         )
         release_url = str(getattr(result, "release_url", ""))
+        if status in {"ready", "migration_ready"}:
+            self._offer_update_restart(result, release_url)
+            return
         actions = []
         if status in {"manual_required", "unavailable", "error"} and release_url:
             actions.append(
@@ -206,6 +209,7 @@ class HCQPanel(QtWidgets.QWidget):
             )
         title = {
             "ready": "Update Ready",
+            "migration_ready": "Standard Installation Ready",
             "up_to_date": "HCQ Is Up to Date",
             "no_release": "No Release Available",
             "busy": "Update Already in Progress",
@@ -218,6 +222,70 @@ class HCQPanel(QtWidgets.QWidget):
             actions=actions,
             timeout_ms=0 if status == "error" else 8000,
         )
+
+    def _offer_update_restart(self, result: Any, release_url: str) -> None:
+        migration = bool(getattr(result, "migration_required", False))
+        dialog = QtWidgets.QMessageBox(self)
+        dialog.setWindowTitle(
+            "Standard Installation Ready" if migration else "Update Ready"
+        )
+        dialog.setIcon(QtWidgets.QMessageBox.Icon.Information)
+        dialog.setText(str(getattr(result, "message", "Update ready.")))
+        dialog.setInformativeText(
+            "Houdini will show its standard save prompt before closing. "
+            "HCQ will reopen the same saved HIP file after the current "
+            "Houdini process exits."
+        )
+        restart_label = "Install and Restart" if migration else "Restart Now"
+        restart_button = dialog.addButton(
+            restart_label,
+            QtWidgets.QMessageBox.ButtonRole.AcceptRole,
+        )
+        later_button = dialog.addButton(
+            "Later",
+            QtWidgets.QMessageBox.ButtonRole.RejectRole,
+        )
+        release_button = None
+        if release_url:
+            release_button = dialog.addButton(
+                "Open Release",
+                QtWidgets.QMessageBox.ButtonRole.ActionRole,
+            )
+        dialog.setDefaultButton(restart_button)
+        dialog.exec()
+        clicked = dialog.clickedButton()
+        if clicked is release_button:
+            self._open_url(release_url)
+            return
+        if clicked is not restart_button:
+            self.show_notification(
+                "Restart Deferred",
+                "Restart Houdini later to finish the HCQ update.",
+                timeout_ms=8000,
+            )
+            return
+        try:
+            restarted = call(
+                self.manager,
+                "restart_for_update",
+                result,
+                default=False,
+            )
+        except SystemExit:
+            raise
+        except Exception as error:
+            self.show_notification(
+                "Could Not Restart Houdini",
+                str(error),
+                timeout_ms=0,
+            )
+            return
+        if not restarted:
+            self.show_notification(
+                "Restart Canceled",
+                "The HCQ update remains ready and will be applied later.",
+                timeout_ms=8000,
+            )
 
     def _tab_changed(self, index: int) -> None:
         settings = value(self.manager, "settings")

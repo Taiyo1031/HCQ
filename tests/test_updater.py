@@ -182,6 +182,7 @@ class UpdaterTests(unittest.TestCase):
             service = UpdateService(
                 install,
                 install_root=install,
+                current_version="1.1.0",
                 api_url="https://example.test/api",
                 opener=opener,
             )
@@ -210,6 +211,7 @@ class UpdaterTests(unittest.TestCase):
             service = UpdateService(
                 install,
                 install_root=install,
+                current_version="1.1.0",
                 api_url="https://example.test/api",
                 opener=opener,
             )
@@ -265,6 +267,7 @@ class UpdaterTests(unittest.TestCase):
             result = UpdateService(
                 install,
                 install_root=install,
+                current_version="1.1.0",
                 api_url="https://example.test/api",
                 opener=opener,
             ).check_and_stage()

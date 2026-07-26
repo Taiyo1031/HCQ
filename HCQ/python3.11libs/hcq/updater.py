@@ -15,6 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
+from hcq_installation import (
+    active_runtime_instances,
+    development_checkout,
+    installation_mode,
+)
 from hcq_update_lock import UpdateFileLock, UpdateLockError
 
 from .constants import (
@@ -52,6 +57,8 @@ class UpdateResult:
     latest_version: str = ""
     release_url: str = LATEST_RELEASE_URL
     restart_required: bool = False
+    installer_path: str = ""
+    migration_required: bool = False
 
 
 def parse_version(value: str) -> tuple[int, int, int]:
@@ -119,6 +126,7 @@ class UpdateService:
         current_version: str = VERSION,
         api_url: str = LATEST_RELEASE_API_URL,
         opener: Callable[..., Any] | None = None,
+        updates_root: str | Path | None = None,
     ) -> None:
         self.storage_root = Path(storage_root).resolve()
         self.install_root = (
@@ -129,14 +137,29 @@ class UpdateService:
         self.current_version = current_version
         self.api_url = api_url
         self._opener = opener or urllib.request.urlopen
+        self._updates_root = (
+            Path(updates_root).resolve()
+            if updates_root is not None
+            else self.storage_root / "updates"
+        )
 
     @property
     def updates_root(self) -> Path:
-        return self.storage_root / "updates"
+        return self._updates_root
 
     @property
     def pending_path(self) -> Path:
         return self.updates_root / "pending.json"
+
+    @property
+    def mode(self) -> str:
+        return installation_mode(self.install_root)
+
+    def other_runtime_instances(self) -> list[int]:
+        return active_runtime_instances(
+            self.updates_root,
+            exclude_pid=os.getpid(),
+        )
 
     def check_and_stage(self) -> UpdateResult:
         try:
@@ -153,7 +176,18 @@ class UpdateService:
             release = self._latest_release()
             latest = self._release_version(release)
             release_url = str(release.get("html_url") or LATEST_RELEASE_URL)
+            assets = {
+                str(item.get("name")): str(item.get("browser_download_url"))
+                for item in release.get("assets", [])
+                if isinstance(item, dict)
+            }
             if parse_version(latest) <= parse_version(self.current_version):
+                if self.mode == "legacy":
+                    return self._prepare_standard_installer(
+                        self.current_version,
+                        assets,
+                        release_url,
+                    )
                 return UpdateResult(
                     "up_to_date",
                     f"HCQ {self.current_version} is up to date.",
@@ -173,13 +207,20 @@ class UpdateService:
                     latest,
                     release_url,
                 )
+            if not self._installation_is_writable():
+                return UpdateResult(
+                    "manual_required",
+                    (
+                        f"HCQ {latest} is available, but this installation "
+                        "is read-only. Open the release page and update it "
+                        "manually."
+                    ),
+                    self.current_version,
+                    latest,
+                    release_url,
+                )
             archive_name = f"HCQ-{latest}-windows.zip"
             checksum_name = f"{archive_name}.sha256"
-            assets = {
-                str(item.get("name")): str(item.get("browser_download_url"))
-                for item in release.get("assets", [])
-                if isinstance(item, dict)
-            }
             if archive_name not in assets or checksum_name not in assets:
                 return UpdateResult(
                     "unavailable",
@@ -218,6 +259,47 @@ class UpdateService:
             )
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
             return UpdateResult("error", f"Could not prepare the update: {error}")
+
+    def _prepare_standard_installer(
+        self,
+        version: str,
+        assets: dict[str, str],
+        release_url: str,
+    ) -> UpdateResult:
+        installer_name = f"HCQ-Setup-{version}.exe"
+        checksum_name = f"{installer_name}.sha256"
+        if installer_name not in assets or checksum_name not in assets:
+            return UpdateResult(
+                "manual_required",
+                (
+                    "This HCQ copy uses the legacy installation layout. "
+                    "Open the release page to install the standard Windows "
+                    "version."
+                ),
+                self.current_version,
+                version,
+                release_url,
+                migration_required=True,
+            )
+        installer = self._stage_installer(
+            installer_name,
+            assets[installer_name],
+            assets[checksum_name],
+        )
+        return UpdateResult(
+            "migration_ready",
+            (
+                "The standard HCQ installer is ready. Install it to move "
+                "the plug-in out of the Houdini preferences folder while "
+                "keeping queues, history, logs, and settings."
+            ),
+            self.current_version,
+            version,
+            release_url,
+            True,
+            str(installer),
+            True,
+        )
 
     def _latest_release(self) -> dict[str, Any]:
         request = urllib.request.Request(
@@ -265,6 +347,32 @@ class UpdateService:
         with self._open(request, timeout=30) as response:
             return response.read()
 
+    def _stage_installer(
+        self,
+        installer_name: str,
+        installer_url: str,
+        checksum_url: str,
+    ) -> Path:
+        self.updates_root.mkdir(parents=True, exist_ok=True)
+        installers = self.updates_root / "installers"
+        installers.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=".installer-", dir=str(self.updates_root)
+        ) as temporary:
+            candidate = Path(temporary) / installer_name
+            self._download(installer_url, candidate)
+            expected = _read_checksum(
+                self._download_bytes(checksum_url),
+                installer_name,
+            )
+            if sha256_file(candidate) != expected:
+                raise ValueError("The HCQ installer checksum does not match.")
+            destination = installers / installer_name
+            temporary_destination = destination.with_suffix(".download")
+            shutil.copy2(candidate, temporary_destination)
+            os.replace(temporary_destination, destination)
+        return destination
+
     def _stage_release(
         self,
         version: str,
@@ -303,7 +411,11 @@ class UpdateService:
                 if candidate.exists():
                     shutil.rmtree(candidate)
 
-        files = list(manifest["files"])
+        files = [
+            item
+            for item in manifest["files"]
+            if PurePosixPath(str(item.get("path", ""))).parts[:1] == ("HCQ",)
+        ]
         files.append(
             {
                 "path": RELEASE_MANIFEST,
@@ -314,7 +426,7 @@ class UpdateService:
         remove = self._obsolete_files(current_manifest, files)
         pending = {
             "schema": PENDING_SCHEMA,
-            "schema_version": 1,
+            "schema_version": 2,
             "from_version": self.current_version,
             "to_version": version,
             "created_at": now_iso(),
@@ -389,6 +501,8 @@ class UpdateService:
                 str(_safe_archive_path(str(item.get("path", ""))))
                 for item in current.get("files", [])
                 if isinstance(item, dict)
+                and PurePosixPath(str(item.get("path", ""))).parts[:1]
+                == ("HCQ",)
             }
             new = {str(item["path"]) for item in new_files}
             return sorted(old - new)
@@ -396,9 +510,20 @@ class UpdateService:
             return []
 
     def _is_development_checkout(self) -> bool:
-        for parent in (self.install_root, *self.install_root.parents):
-            if (parent / ".git").exists():
-                return True
-            if parent == parent.parent:
-                break
-        return False
+        return development_checkout(self.install_root)
+
+    def _installation_is_writable(self) -> bool:
+        if not self.install_root.is_dir():
+            return False
+        probe = self.install_root / ".hcq-write-test"
+        try:
+            with probe.open("xb"):
+                pass
+            probe.unlink()
+            return True
+        except OSError:
+            try:
+                probe.unlink()
+            except OSError:
+                pass
+            return False

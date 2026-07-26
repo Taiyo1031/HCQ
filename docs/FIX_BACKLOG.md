@@ -39,6 +39,7 @@
 - `挙動改善`
 - `ドキュメント`
 - `要調査`
+- `配布/インストール`
 
 必要になったらカテゴリは追加して構いません。
 
@@ -73,6 +74,10 @@
 現時点では未登録です。
 
 ### 要調査
+
+現時点では未登録です。
+
+### 配布/インストール
 
 現時点では未登録です。
 
@@ -160,3 +165,38 @@
   - Houdini 21.0.729 integrationで`Leave 1 Thread Free`の適用と元設定への復元を確認した。
   - PySide6 UI smokeで3か所のCPU選択肢、動的な実効値説明、既定値維持を確認した。
 - Evidence: `docs/fix_backlog_assets/fix-0004-cpu-usage-limit-request.png`
+
+## FIX-0005: アップデート後に再起動確認ボタンを出す
+
+- Status: `Done`
+- Priority: `P2`
+- Category: `挙動改善`
+- Summary: 更新準備完了時に、今すぐ安全に再起動するか後で再起動するかを選択できるようにした。
+- Resolution:
+  - `Restart Now`と`Later`をmodalダイアログで提示する。
+  - Queue実行中または別Houdiniセッションが同じHCQを使用中の場合は再起動を拒否する。
+  - Houdini標準の未保存HIP確認後、同梱Python helperが現在プロセスの終了を待ち、同じHoudiniと保存済みHIPを再度開く。
+  - 旧配置から標準インストーラーへ移行する場合は`Install and Restart`を表示する。
+- Validation:
+  - unit testでQueue/別プロセス抑止、保存確認Cancel、helper起動、インストーラー先行実行、HIP引数を確認した。
+  - PySide6 smokeでUpdaterのready結果が再起動フローへ渡ることを確認した。
+
+## FIX-0006: 配布・インストール・更新方式を標準化する
+
+- Status: `Done`
+- Priority: `P2`
+- Category: `配布/インストール`
+- Summary: 管理者権限不要のWindows Setupを主配布、Houdini Package Archiveを代替配布とし、本体・Package登録・ユーザーデータを分離した。
+- Resolution:
+  - `%LOCALAPPDATA%\Programs\HCQ`へ導入するInno Setup定義を追加した。
+  - Documents/OneDrive側とuser-profile側の検出済みHoudini 21.xへ同じPackage JSONを登録する。
+  - 旧1.1.x用互換ZIP、Package Archive、Setup EXEと各SHA-256を同じビルドから生成する。
+  - 旧manifestに含まれる未変更プラグインファイルだけをバックアップして除去し、設定、Queues、履歴、ログ、Recoveryを保持する。
+  - 更新用stage、lock、backupをインストール先ID単位で`%LOCALAPPDATA%\HCQ\updates`へ分離した。
+  - GitHub Actionsでunit test、Inno build、asset検証、タグRelease公開、任意Authenticode署名を自動化した。
+  - README、INSTALL、Distribution Guideへ導入、移行、更新、アンインストール手順を記載した。
+- Validation:
+  - 71 unit testsで移行、path safety、共有ロック、transaction rollback、Updater、再起動を確認した。
+  - Legacy ZIPとPackage ArchiveをHoudini 21.0.729のclean preferenceから読み込み、HCQ 1.2.0を確認した。
+  - Inno Setup 6.7.3で`HCQ-Setup-1.2.0.exe`を生成し、PEヘッダー、manifest、SHA-256を検証した。
+  - このPCではApplication Controlが未署名ローカルEXEの起動を拒否したため、実インストール/アンインストール操作はAcceptance Checklistへ手動確認項目として残した。

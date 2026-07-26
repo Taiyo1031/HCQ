@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from hcq_installation import active_runtime_instances, shared_updates_root
 from hcq_update_lock import UpdateFileLock, UpdateLockError
 
 
@@ -125,7 +126,7 @@ def _load_pending(path: Path) -> dict[str, Any] | None:
         return None
     if (
         value.get("schema") != PENDING_SCHEMA
-        or value.get("schema_version") != 1
+        or value.get("schema_version") not in {1, 2}
     ):
         raise ValueError("The pending HCQ update is invalid.")
     return value
@@ -175,10 +176,10 @@ def _unique_state_path(path: Path, prefix: str, version: str) -> Path:
 def _restore_records(
     records: list[dict[str, Any]],
     install_parent: Path,
-    data_root: Path,
+    updates_root: Path,
 ) -> bool:
     restored = True
-    backup_root = data_root / "updates" / "backups"
+    backup_root = updates_root / "backups"
     for record in reversed(records):
         try:
             relative = _safe_relative(str(record["path"]))
@@ -187,7 +188,7 @@ def _restore_records(
                 raise ValueError(f"Unsafe rollback target: {relative}")
             backup_value = str(record.get("backup", ""))
             if backup_value:
-                backup = data_root / Path(*PurePosixPath(backup_value).parts)
+                backup = updates_root / Path(*PurePosixPath(backup_value).parts)
                 if not _inside(backup, backup_root) or not backup.is_file():
                     raise ValueError(f"Rollback backup is missing: {relative}")
                 _atomic_copy(backup, target)
@@ -205,7 +206,7 @@ def _restore_records(
 def _recover_incomplete_transaction(
     journal_path: Path,
     install_parent: Path,
-    data_root: Path,
+    updates_root: Path,
 ) -> None:
     journal = _load_json(journal_path)
     if journal is None:
@@ -220,10 +221,10 @@ def _recover_incomplete_transaction(
         raise UpdateRecoveryError(
             "HCQ found an invalid update recovery journal."
         )
-    if not _restore_records(journal["records"], install_parent, data_root):
+    if not _restore_records(journal["records"], install_parent, updates_root):
         raise UpdateRecoveryError(
             "HCQ could not recover an interrupted update. "
-            "Restore the latest folder under HCQ/updates/backups manually."
+            "Restore the latest installation-scoped update backup manually."
         )
     journal_path.unlink()
 
@@ -231,12 +232,12 @@ def _recover_incomplete_transaction(
 def _apply_locked(
     pending_path: Path,
     install_root: Path,
-    data_root: Path,
+    updates_root: Path,
 ) -> str | None:
     install_parent = install_root.parent
-    journal_path = data_root / "updates" / "applying.json"
+    journal_path = updates_root / "applying.json"
     _recover_incomplete_transaction(
-        journal_path, install_parent, data_root
+        journal_path, install_parent, updates_root
     )
 
     pending = _load_pending(pending_path)
@@ -249,7 +250,7 @@ def _apply_locked(
         expected_install != install_root
         or expected_parent != install_parent
         or _development_checkout(install_root)
-        or not _inside(stage_root, data_root / "updates" / "staged")
+        or not _inside(stage_root, updates_root / "staged")
     ):
         raise ValueError("The pending update does not match this installation.")
 
@@ -311,7 +312,7 @@ def _apply_locked(
 
     stamp = _timestamp()
     backup_root = (
-        data_root / "updates" / "backups" / f"{stamp}-{to_version}"
+        updates_root / "backups" / f"{stamp}-{to_version}"
     )
     records: list[dict[str, Any]] = []
     for relative, target in [
@@ -333,7 +334,7 @@ def _apply_locked(
             if _sha256(backup) != original_hash:
                 raise ValueError(f"Could not verify update backup: {relative}")
             record["backup"] = (
-                PurePosixPath(*backup.relative_to(data_root).parts).as_posix()
+                PurePosixPath(*backup.relative_to(updates_root).parts).as_posix()
             )
             record["original_sha256"] = original_hash
         records.append(record)
@@ -363,7 +364,7 @@ def _apply_locked(
                     f"Installed update verification failed: {relative}"
                 )
     except Exception as error:
-        restored = _restore_records(records, install_parent, data_root)
+        restored = _restore_records(records, install_parent, updates_root)
         if restored:
             try:
                 journal_path.unlink()
@@ -377,7 +378,7 @@ def _apply_locked(
             print(f"HCQ update was rolled back: {error}")
             return None
         _atomic_json(
-            data_root / "updates" / "UPDATE_RECOVERY_REQUIRED.json",
+            updates_root / "UPDATE_RECOVERY_REQUIRED.json",
             {
                 "error": str(error),
                 "journal": str(journal_path),
@@ -386,7 +387,7 @@ def _apply_locked(
         )
         raise UpdateRecoveryError(
             "HCQ update and rollback verification failed. "
-            "Restore the latest folder under HCQ/updates/backups manually."
+            "Restore the latest installation-scoped update backup manually."
         ) from error
 
     journal_path.unlink()
@@ -401,6 +402,7 @@ def apply_pending(
     hou_module: Any | None = None,
     plugin_root: str | Path | None = None,
     storage_root: str | Path | None = None,
+    updates_root: str | Path | None = None,
 ) -> str | None:
     """Apply a staged update and return the installed version, if any."""
     install_root = (
@@ -415,13 +417,40 @@ def apply_pending(
             pref = Path(
                 os.environ.get("HOUDINI_USER_PREF_DIR", install_root.parent)
             )
-        data_root = (pref / "HCQ").resolve()
+        legacy_data_root = (pref / "HCQ").resolve()
     else:
-        data_root = Path(storage_root).resolve()
-    pending_path = data_root / "updates" / "pending.json"
+        legacy_data_root = Path(storage_root).resolve()
+    if updates_root is not None:
+        update_state_root = Path(updates_root).resolve()
+    elif storage_root is not None:
+        # Explicit storage roots are retained for tests and embedders using
+        # the original updater contract.
+        update_state_root = legacy_data_root / "updates"
+    else:
+        update_state_root = shared_updates_root(
+            install_root,
+            fallback=legacy_data_root.parent,
+        )
+        legacy_updates = legacy_data_root / "updates"
+        if (
+            not (update_state_root / "pending.json").is_file()
+            and (legacy_updates / "pending.json").is_file()
+        ):
+            update_state_root = legacy_updates
+    pending_path = update_state_root / "pending.json"
     try:
-        with UpdateFileLock(data_root / "updates" / "update.lock"):
-            return _apply_locked(pending_path, install_root, data_root)
+        if active_runtime_instances(update_state_root):
+            print(
+                "HCQ update was deferred because another Houdini session "
+                "is using this installation."
+            )
+            return None
+        with UpdateFileLock(update_state_root / "update.lock"):
+            return _apply_locked(
+                pending_path,
+                install_root,
+                update_state_root,
+            )
     except UpdateLockError:
         print("HCQ update was deferred because another update is active.")
         return None
