@@ -10,7 +10,7 @@ Every portable document contains:
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.1.0"
+  "hcq_version": "1.1.1"
 }
 ```
 
@@ -39,7 +39,7 @@ No JSON field is evaluated as Python.
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.1.0",
+  "hcq_version": "1.1.1",
   "houdini_min_version": "21.0",
   "created_with_houdini": "21.0.729",
   "queues": [

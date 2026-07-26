@@ -61,6 +61,7 @@ JOB_SETTINGS = "Job Settings"
 
 PREFLIGHT_CHECK = "Preflight Check"
 RUN_QUEUE = "Run Queue"
+DURING_RUN = "During Run:"
 PAUSE_AFTER_CURRENT = "Pause After Current Job"
 RESUME = "Resume"
 CANCEL_CURRENT = "Cancel Current Cook"

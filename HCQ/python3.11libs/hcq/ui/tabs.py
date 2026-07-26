@@ -724,15 +724,62 @@ class RunTab(QtWidgets.QWidget):
         layout.addWidget(self.progress)
         self.current_job = QtWidgets.QLabel("No active job")
         layout.addWidget(self.current_job)
-        controls = [
-            make_button(text.PREFLIGHT_CHECK, self._preflight),
-            make_button(text.EXPORT_RUN_LIST, self._export),
-            make_button(text.RUN_QUEUE, self._run, object_name="hcqPrimaryButton"),
-            make_button(text.PAUSE_AFTER_CURRENT, self._pause),
-            make_button(text.RESUME, self._resume),
-            make_button(text.CANCEL_CURRENT, self._cancel),
-        ]
-        layout.addLayout(compact_button_row(*controls))
+        self.preflight_button = make_button(
+            text.PREFLIGHT_CHECK, self._preflight
+        )
+        self.export_button = make_button(text.EXPORT_RUN_LIST, self._export)
+        self.run_button = make_button(
+            text.RUN_QUEUE,
+            self._run,
+            object_name="hcqPrimaryButton",
+        )
+        run_font = self.run_button.font()
+        run_font.setBold(True)
+        self.run_button.setFont(run_font)
+        self.run_button.setMinimumWidth(
+            max(
+                self.run_button.sizeHint().width(),
+                self.run_button.fontMetrics().horizontalAdvance(text.RUN_QUEUE)
+                + 28,
+            )
+        )
+        self.pause_button = make_button(
+            text.PAUSE_AFTER_CURRENT, self._pause
+        )
+        self.resume_button = make_button(text.RESUME, self._resume)
+        self.cancel_button = make_button(text.CANCEL_CURRENT, self._cancel)
+        for button in (
+            self.preflight_button,
+            self.export_button,
+            self.run_button,
+            self.pause_button,
+            self.resume_button,
+            self.cancel_button,
+        ):
+            button.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Maximum,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+
+        preparation_row = QtWidgets.QHBoxLayout()
+        preparation_row.setContentsMargins(0, 0, 0, 0)
+        preparation_row.setSpacing(4)
+        preparation_row.addWidget(self.preflight_button)
+        preparation_row.addWidget(self.export_button)
+        preparation_row.addStretch(1)
+        preparation_row.addWidget(self.run_button)
+        layout.addLayout(preparation_row)
+
+        execution_row = QtWidgets.QHBoxLayout()
+        execution_row.setContentsMargins(0, 0, 0, 0)
+        execution_row.setSpacing(4)
+        self.during_run_label = QtWidgets.QLabel(text.DURING_RUN)
+        execution_row.addWidget(self.during_run_label)
+        execution_row.addWidget(self.pause_button)
+        execution_row.addWidget(self.resume_button)
+        execution_row.addWidget(self.cancel_button)
+        execution_row.addStretch(1)
+        layout.addLayout(execution_row)
         self.refresh()
 
     def _queues(self) -> list[Any]:
@@ -782,6 +829,25 @@ class RunTab(QtWidgets.QWidget):
         self.current_job.setText(
             f"Current Job: {item_value(current, 'display_name', 'None')}"
         )
+        self._refresh_control_state(runner, state)
+
+    def _refresh_control_state(self, runner: Any, state: str) -> None:
+        active = bool(value(runner, "active", False))
+        pause_requested = bool(value(runner, "pause_requested", False))
+        cancel_requested = bool(value(runner, "cancel_requested", False))
+        terminal = state in {"completed", "failed", "cancelled"}
+
+        preparation_enabled = not active
+        self.preflight_button.setEnabled(preparation_enabled)
+        self.export_button.setEnabled(preparation_enabled)
+        self.run_button.setEnabled(preparation_enabled)
+
+        paused = pause_requested or state in {"pause_requested", "paused"}
+        cancelling = cancel_requested or state == "cancel_requested"
+        controls_available = active and not terminal and not cancelling
+        self.pause_button.setEnabled(controls_available and not paused)
+        self.resume_button.setEnabled(controls_available and paused)
+        self.cancel_button.setEnabled(controls_available)
 
     def _add_queue(self) -> None:
         queues = manager_collection(self.manager, "queues")

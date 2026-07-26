@@ -63,18 +63,23 @@ class HCQPanel(QtWidgets.QWidget):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(2)
         title_row = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel(text.APP_TITLE)
-        title.setStyleSheet("font-weight: bold;")
-        title_row.addWidget(title)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
+        self.title_label = QtWidgets.QLabel(text.APP_TITLE)
+        self.title_label.setStyleSheet("font-weight: bold;")
+        title_row.addWidget(self.title_label)
+        title_row.addStretch(1)
         self.usage_button = self._header_button(
             text.USAGE, text.USAGE_TOOLTIP, self._open_usage
         )
         self.update_button = self._header_button(
-            text.UPDATE, text.UPDATE_TOOLTIP, self._check_for_updates
+            text.UPDATE,
+            text.UPDATE_TOOLTIP,
+            self._check_for_updates,
+            text.CHECKING_FOR_UPDATES,
         )
         title_row.addWidget(self.usage_button)
         title_row.addWidget(self.update_button)
-        title_row.addStretch(1)
         header.addLayout(title_row)
         status_row = QtWidgets.QHBoxLayout()
         self.monitor_status = QtWidgets.QLabel(text.MONITOR_ON)
@@ -119,13 +124,28 @@ class HCQPanel(QtWidgets.QWidget):
         label: str,
         tooltip: str,
         callback: Any,
+        *alternate_labels: str,
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
         button.setText(label)
         button.setToolTip(tooltip)
-        button.setAutoRaise(True)
+        button.setAccessibleName(label)
+        button.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly
+        )
+        button.setAutoRaise(False)
+        button.ensurePolished()
+        font_metrics = button.fontMetrics()
+        text_width = max(
+            font_metrics.horizontalAdvance(value)
+            for value in (label, *alternate_labels)
+        )
+        button.setMinimumWidth(
+            max(button.sizeHint().width(), text_width + 20)
+        )
+        button.setMinimumHeight(max(button.sizeHint().height(), 24))
         button.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         button.clicked.connect(callback)

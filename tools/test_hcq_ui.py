@@ -70,7 +70,7 @@ class FakeUpdater:
         self.calls += 1
         return SimpleNamespace(
             status="up_to_date",
-            message="HCQ 1.1.0 is up to date.",
+            message="HCQ 1.1.1 is up to date.",
             release_url="https://github.com/Taiyo1031/HCQ/releases/latest",
         )
 
@@ -143,6 +143,29 @@ def main() -> None:
     assert manager.updater.calls == 1
     assert panel.update_button.isEnabled()
     assert panel.update_button.text() == "Update"
+    panel.resize(520, 520)
+    app.processEvents()
+    for button, label in (
+        (panel.usage_button, "Usage"),
+        (panel.update_button, "Update"),
+    ):
+        assert (
+            button.toolButtonStyle()
+            == QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly
+        )
+        assert button.width() >= button.fontMetrics().horizontalAdvance(label) + 20
+        assert button.text() == label
+    title_right = (
+        panel.title_label.mapTo(panel, QtCore.QPoint(0, 0)).x()
+        + panel.title_label.width()
+    )
+    usage_left = panel.usage_button.mapTo(panel, QtCore.QPoint(0, 0)).x()
+    usage_right = usage_left + panel.usage_button.width()
+    update_left = panel.update_button.mapTo(panel, QtCore.QPoint(0, 0)).x()
+    update_right = update_left + panel.update_button.width()
+    assert title_right < usage_left
+    assert usage_right < update_left
+    assert update_right <= panel.contentsRect().right()
     assert (
         panel.environment_status.width()
         >= panel.environment_status.sizeHint().width()
@@ -160,6 +183,85 @@ def main() -> None:
     assert (
         queue_buttons["Add to Run List"].width()
         <= queue_buttons["Add to Run List"].sizeHint().width()
+    )
+    panel.tabs.setCurrentWidget(panel.run_tab)
+    app.processEvents()
+    run_tab = panel.run_tab
+    assert run_tab.preflight_button.y() == run_tab.export_button.y()
+    assert run_tab.run_button.y() == run_tab.preflight_button.y()
+    assert run_tab.pause_button.y() == run_tab.resume_button.y()
+    assert run_tab.cancel_button.y() == run_tab.pause_button.y()
+    assert run_tab.pause_button.y() > run_tab.preflight_button.y()
+    assert run_tab.during_run_label.text() == "During Run:"
+    assert run_tab.run_button.objectName() == "hcqPrimaryButton"
+    assert run_tab.run_button.font().bold()
+    for button in (
+        run_tab.preflight_button,
+        run_tab.export_button,
+        run_tab.run_button,
+        run_tab.pause_button,
+        run_tab.resume_button,
+        run_tab.cancel_button,
+    ):
+        position = button.mapTo(run_tab, QtCore.QPoint(0, 0))
+        assert position.x() >= 0
+        assert position.x() + button.width() <= run_tab.width()
+        assert button.width() >= button.sizeHint().width()
+
+    def assert_run_controls(
+        state,
+        active,
+        pause_requested,
+        cancel_requested,
+        expected,
+    ):
+        manager.runner.state = state
+        manager.runner.active = active
+        manager.runner.pause_requested = pause_requested
+        manager.runner.cancel_requested = cancel_requested
+        run_tab.refresh()
+        actual = tuple(
+            button.isEnabled()
+            for button in (
+                run_tab.preflight_button,
+                run_tab.export_button,
+                run_tab.run_button,
+                run_tab.pause_button,
+                run_tab.resume_button,
+                run_tab.cancel_button,
+            )
+        )
+        assert actual == expected, (state, actual, expected)
+
+    assert_run_controls(
+        "idle", False, False, False, (True, True, True, False, False, False)
+    )
+    assert_run_controls(
+        "running", True, False, False, (False, False, False, True, False, True)
+    )
+    assert_run_controls(
+        "pause_requested",
+        True,
+        True,
+        False,
+        (False, False, False, False, True, True),
+    )
+    assert_run_controls(
+        "paused", True, True, False, (False, False, False, False, True, True)
+    )
+    assert_run_controls(
+        "cancel_requested",
+        True,
+        False,
+        True,
+        (False, False, False, False, False, False),
+    )
+    assert_run_controls(
+        "completed",
+        False,
+        False,
+        False,
+        (True, True, True, False, False, False),
     )
     panel.tabs.setCurrentWidget(panel.history_tab)
     panel.resize(520, 520)

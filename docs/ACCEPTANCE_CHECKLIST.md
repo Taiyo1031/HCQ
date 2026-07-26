@@ -1,4 +1,4 @@
-# HCQ 1.1 Acceptance Checklist
+# HCQ 1.1.1 Acceptance Checklist
 
 ## Automated validation recorded on 2026-07-26
 
@@ -6,12 +6,13 @@
 - [x] Houdini 21.0.729 integration checks pass for Generic SOP, File Cache,
   ROP, TOP, Button, CPU restoration, and Monitor rename tracking.
 - [x] PySide6 offscreen smoke checks pass for all five tabs, modeless Queue
-  Editor graph selection, History action sizing, Settings notifications,
-  Import Preview, and Missing Node resolution widgets.
+  Editor graph selection, full-width header actions, state-aware Run controls,
+  History action sizing, Settings notifications, Import Preview, and Missing
+  Node resolution widgets.
 - [x] Shelf and Python Panel XML validate against the SideFX Houdini 21.0
   XSD files.
-- [x] `HCQ-1.1.0-windows.zip` and SHA-256 validate, and the archive loads
-  `hcq` 1.1.0 through its Package JSON
+- [x] `HCQ-1.1.1-windows.zip` and SHA-256 validate, and the archive loads
+  `hcq` 1.1.1 through its Package JSON
   from clean temporary Houdini preferences.
 - [x] Updater validates release manifests, detects development checkouts,
   rejects checksum mismatches, preserves user data, and rolls back failures.

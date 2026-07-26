@@ -9,11 +9,16 @@ another Houdini process, or create helper nodes.
 
 Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
+## Project Docs
+
+- [Fix Backlog](docs/FIX_BACKLOG.md)
+- [Acceptance Checklist](docs/ACCEPTANCE_CHECKLIST.md)
+- [JSON Format](docs/JSON_FORMAT.md)
+
 ## Download
 
 [![Download HCQ for Windows](https://img.shields.io/badge/Download-HCQ_for_Windows-2ea44f?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Taiyo1031/HCQ/archive/refs/heads/main.zip)
 [![Release Downloads](https://img.shields.io/badge/View-Release_Downloads-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases)
-[![Download Houdini](https://img.shields.io/badge/Get-Houdini_21.0+-ff4713?style=for-the-badge)](https://www.sidefx.com/download/)
 
 ### What you need
 
@@ -110,9 +115,9 @@ Houdini after changing Python, Shelf, Python Panel, or Package files.
 
 ### Update an installed copy
 
-HCQ 1.1.0 is the first release with the built-in updater, so install this
-version manually using the archive instructions above. Future updates can be
-prepared from the compact **Update** button in the panel header:
+The built-in updater was introduced in HCQ 1.1.0. Install HCQ 1.1.1 manually
+using the archive instructions above. Future updates can be prepared from the
+compact **Update** button in the panel header:
 
 1. Click **Update**.
 2. HCQ checks the latest stable GitHub Release.
