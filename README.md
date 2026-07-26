@@ -18,9 +18,11 @@ Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
 ## Download
 
-[![Download HCQ Setup](https://img.shields.io/badge/Download-HCQ_Setup-2ea44f?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-Setup-1.2.0.exe)
-[![Houdini Package Archive](https://img.shields.io/badge/Download-Houdini_Package-8250df?style=for-the-badge&logo=sidefx&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-1.2.0-houdini-package.zip)
-[![Release Downloads](https://img.shields.io/badge/View-Release_Downloads-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Taiyo1031/HCQ/releases)
+<p>
+  <a href="https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-Setup-1.2.0.exe"><img src="docs/readme_assets/download-hcq-setup.svg" alt="Download HCQ Setup"></a>
+  <a href="https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-1.2.0-houdini-package.zip"><img src="docs/readme_assets/download-houdini-package.svg" alt="Download Houdini Package Archive"></a>
+  <a href="https://github.com/Taiyo1031/HCQ/releases"><img src="docs/readme_assets/view-release-downloads.svg" alt="View all HCQ release downloads"></a>
+</p>
 
 ### What you need
 

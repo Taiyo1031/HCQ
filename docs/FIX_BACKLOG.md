@@ -200,3 +200,18 @@
   - Legacy ZIPとPackage ArchiveをHoudini 21.0.729のclean preferenceから読み込み、HCQ 1.2.0を確認した。
   - Inno Setup 6.7.3で`HCQ-Setup-1.2.0.exe`を生成し、PEヘッダー、manifest、SHA-256を検証した。
   - このPCではApplication Controlが未署名ローカルEXEの起動を拒否したため、実インストール/アンインストール操作はAcceptance Checklistへ手動確認項目として残した。
+
+## FIX-0007: READMEのダウンロードボタンと公開先を修正する
+
+- Status: `Done`
+- Priority: `P1`
+- Category: `ドキュメント`
+- Summary: READMEの分割表示されたShieldsバッジを一体型ボタンへ置き換え、HCQ 1.2.0の実配布assetへ直接到達できるダウンロード導線に修正した。
+- Resolution:
+  - Setup、Houdini Package、Release Downloadsを、左右に分割されないローカルSVGボタンへ置き換えた。
+  - 推奨の`HCQ-Setup-1.2.0.exe`と代替の`HCQ-1.2.0-houdini-package.zip`をLatest Releaseから直接ダウンロードする。
+  - 検証済み6 assetを含む安定版`v1.2.0`をLatest Releaseとして公開する。
+- Validation:
+  - GitHub README上で3ボタンが独立した一体型ボタンとして表示されることを確認する。
+  - Setup、Package Archive、互換ZIPと各SHA-256がReleaseから取得でき、ローカル検証済みchecksumと一致することを確認する。
+- Evidence: `docs/fix_backlog_assets/fix-0007-readme-download-buttons.png`
