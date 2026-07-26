@@ -115,7 +115,7 @@ Houdini after changing Python, Shelf, Python Panel, or Package files.
 
 ### Update an installed copy
 
-The built-in updater was introduced in HCQ 1.1.0. Install HCQ 1.1.1 manually
+The built-in updater was introduced in HCQ 1.1.0. Install HCQ 1.1.2 manually
 using the archive instructions above. Future updates can be prepared from the
 compact **Update** button in the panel header:
 
@@ -219,13 +219,20 @@ blocking foreground cook prevents the panel from processing input.
 
 ## CPU limits
 
-HCQ can keep the current Houdini thread setting, use all available threads,
-apply a fixed maximum, reserve logical threads, or request single-thread mode.
+The default **Use Current Houdini Setting** leaves Houdini's existing maximum
+thread setting unchanged. To keep the machine more responsive during a Queue,
+choose **Leave Logical Threads Free** and enter how many logical processor
+threads HCQ should leave unused by Houdini. For example, on a machine with 16
+logical threads, leaving 1 free applies a Houdini limit of 15.
+
+You can also use all logical threads, set an exact maximum, or request a single
+logical thread. HCQ shows the effective limit directly below each CPU control.
 The previous Houdini setting is restored after every job, including failure,
 cancellation, and exceptions.
 
-This is an upper limit only. Individual nodes may use fewer threads or may be
-limited by GPU, memory, or disk performance.
+Thread limits are upper bounds, not target Windows CPU percentages. Individual
+nodes may use fewer threads, may be limited by GPU, memory, or disk performance,
+or may not fully honor Houdini's runtime thread limit.
 
 ## Output verification
 

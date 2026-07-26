@@ -44,27 +44,11 @@
 
 ## 優先対応
 
-- `FIX-0004` CPU を使い切らない設定を分かりやすくする
+現時点では未登録です。
 
 ## 実装待ち一覧
 
-## FIX-0004: CPU を使い切らない設定を分かりやすくする
-
-- Status: `Open`
-- Priority: `P2`
-- Category: `要調査`
-- Summary: CPU を 100% 使い切らないようにしたい意図はあるが、現状 UI 上で「1コア残す」「少し余力を残す」といった設定が分かりにくい可能性がある。
-- Repro / Expected:
-  - 現状: 重い処理中に Windows のタスクマネージャー上で CPU 使用率が高く張り付きやすく、ユーザー視点では「CPU を使いすぎない設定」が見つけにくい。たとえば「1コア残す」「100%使用しないようにする」といった考え方で設定したい。
-  - 期待: CPU 使用量を抑える考え方が UI 上で理解しやすく、必要なら「1コア残す」「複数コアを予約する」などの表現で直感的に選べる。
-  - 再現手順: HCQ で重いジョブを実行し、Windows タスクマネージャーの CPU グラフを確認しながら、HCQ 側の CPU 設定導線とラベルを見比べる。
-- Impact: マシン全体の操作快適性、他アプリ併用時の負荷感、CPU 制限機能の理解しやすさに影響する。
-- Notes:
-  - 現状コードと README には CPU 制限機能があり、`Fixed Thread Count`、`Reserve Threads`、`single-thread` 相当の選択肢が存在する。
-  - そのため本件は「機能不足」の可能性もあるが、まずは既存機能の見つけやすさ、名称、説明不足、デフォルト値、プリセット不足のどこが問題か切り分けたい。
-  - 画像ベースの観察内容: Windows タスクマネージャーで CPU 使用率が 93% 前後まで上がっており、ユーザーは HCQ 実行中に CPU を使い切らない制御を求めている。
-  - 実装検討時は `README.md` の CPU 説明、`hcq/ui/editors.py` の CPU 項目、`hcq/ui/tabs.py` の Settings 側デフォルト CPU 設定を確認する。
-  - 保存画像: `docs/fix_backlog_assets/fix-0004-cpu-usage-limit-request.png`
+現時点では未登録です。
 
 ## カテゴリ別一覧
 
@@ -90,12 +74,7 @@
 
 ### 要調査
 
-## FIX-0004: CPU を使い切らない設定を分かりやすくする
-
-- Status: `Open`
-- Priority: `P2`
-- Category: `要調査`
-- Summary: CPU を 100% 使い切らないようにしたい意図はあるが、現状 UI 上で「1コア残す」「少し余力を残す」といった設定が分かりにくい可能性がある。
+現時点では未登録です。
 
 ## 追加テンプレート
 
@@ -163,3 +142,21 @@
 - Evidence:
   - `docs/fix_backlog_assets/fix-0003-run-tab-button-layout-full.png`
   - `docs/fix_backlog_assets/fix-0003-run-tab-button-layout-closeup.png`
+
+## FIX-0004: CPU を使い切らない設定を分かりやすくする
+
+- Status: `Done`
+- Priority: `P2`
+- Category: `UI/UX`
+- Summary: CPU制限機能を、物理コアや固定CPU使用率と誤解せず、空ける論理スレッド数として直感的に設定できるようにした。
+- Resolution:
+  - Settings、Queue Editor、Job Settingsの選択肢を`Leave Logical Threads Free`などの明確な英語表記へ統一した。
+  - 使用可能な論理スレッド数から計算したHoudiniの実効上限をCPU設定の直下へ表示した。16論理スレッドで1を空ける場合は、15スレッド上限になることを表示する。
+  - Queue/Run一覧では`reserve`などの内部値を表示せず、`Leave 1 Thread Free`のような表示にした。
+  - 使用可能数以上を空ける指定にはPreflight warningを追加し、Houdini用に最低1論理スレッドを維持することを示した。
+  - 既定値は`Use Current Houdini Setting`のまま維持し、既存の`reserve` JSON形式とスキーマを変更しなかった。
+- Validation:
+  - 59 unit testsでCPU計算、上限超過warning、保存互換性、例外時のCPU復元を確認した。
+  - Houdini 21.0.729 integrationで`Leave 1 Thread Free`の適用と元設定への復元を確認した。
+  - PySide6 UI smokeで3か所のCPU選択肢、動的な実効値説明、既定値維持を確認した。
+- Evidence: `docs/fix_backlog_assets/fix-0004-cpu-usage-limit-request.png`

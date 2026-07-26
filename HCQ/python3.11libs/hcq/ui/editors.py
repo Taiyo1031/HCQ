@@ -14,10 +14,12 @@ from .bridge import item_value, mapping
 from .common import (
     ReorderTable,
     compact_button_row,
+    cpu_setting_label,
     make_button,
     set_row,
     show_error,
     show_warning,
+    sync_cpu_controls,
 )
 
 try:
@@ -34,14 +36,7 @@ ACTION_ITEMS = [
     ("Force Cook Node", "force_cook"),
     ("Press Button Parameter", "press_button"),
 ]
-CPU_ITEMS = [
-    ("Use Queue Setting", "inherit"),
-    ("Use Current Houdini Setting", "current"),
-    ("Use All Threads", "all"),
-    ("Fixed Thread Count", "threads"),
-    ("Reserve Threads", "reserve"),
-    ("Single Thread", "single"),
-]
+CPU_ITEMS = list(text.CPU_JOB_ITEMS)
 QUEUE_CPU_ITEMS = [item for item in CPU_ITEMS if item[1] != "inherit"]
 HIP_ITEMS = [
     ("Use Queue HIP", "queue"),
@@ -119,6 +114,15 @@ class JobSettingsWidget(QtWidgets.QWidget):
         cpu_row = QtWidgets.QHBoxLayout()
         cpu_row.addWidget(self.cpu_mode, 1)
         cpu_row.addWidget(self.cpu_value)
+        self.cpu_help = QtWidgets.QLabel()
+        self.cpu_help.setWordWrap(True)
+        self.cpu_help.setToolTip(text.CPU_LIMIT_NOTE)
+        cpu_container = QtWidgets.QWidget()
+        cpu_layout = QtWidgets.QVBoxLayout(cpu_container)
+        cpu_layout.setContentsMargins(0, 0, 0, 0)
+        cpu_layout.setSpacing(2)
+        cpu_layout.addLayout(cpu_row)
+        cpu_layout.addWidget(self.cpu_help)
 
         self.on_error = QtWidgets.QComboBox()
         _fill_combo(self.on_error, ERROR_ITEMS)
@@ -145,7 +149,7 @@ class JobSettingsWidget(QtWidgets.QWidget):
         layout.addRow("Button Parameter", self.button_parameter)
         layout.addRow("Frame Range", self.frame_mode)
         layout.addRow("", frame_row)
-        layout.addRow("CPU", cpu_row)
+        layout.addRow("CPU", cpu_container)
         layout.addRow("On Error", self.on_error)
         layout.addRow("Retry Count", self.retry_count)
         layout.addRow("Output Verification", self.verification)
@@ -154,6 +158,7 @@ class JobSettingsWidget(QtWidgets.QWidget):
 
         self.frame_mode.currentIndexChanged.connect(self._sync_visibility)
         self.cpu_mode.currentIndexChanged.connect(self._sync_visibility)
+        self.cpu_value.valueChanged.connect(self._sync_visibility)
         self.hip_mode.currentIndexChanged.connect(self._sync_visibility)
         self.action.currentIndexChanged.connect(self._sync_visibility)
         for widget in self.findChildren(QtWidgets.QWidget):
@@ -176,7 +181,7 @@ class JobSettingsWidget(QtWidgets.QWidget):
         custom = self.frame_mode.currentData() == "custom"
         for widget in (self.frame_start, self.frame_end, self.frame_step):
             widget.setEnabled(custom)
-        self.cpu_value.setEnabled(self.cpu_mode.currentData() in {"threads", "reserve"})
+        sync_cpu_controls(self.cpu_mode, self.cpu_value, self.cpu_help)
         self.hip_path.setEnabled(self.hip_mode.currentData() == "path")
         self.button_parameter.setEnabled(self.action.currentData() == "press_button")
 
@@ -330,12 +335,22 @@ class QueueEditorDialog(QtWidgets.QDialog):
         cpu_row = QtWidgets.QHBoxLayout()
         cpu_row.addWidget(self.cpu_mode, 1)
         cpu_row.addWidget(self.cpu_value)
+        self.cpu_help = QtWidgets.QLabel()
+        self.cpu_help.setWordWrap(True)
+        self.cpu_help.setToolTip(text.CPU_LIMIT_NOTE)
+        cpu_container = QtWidgets.QWidget()
+        cpu_layout = QtWidgets.QVBoxLayout(cpu_container)
+        cpu_layout.setContentsMargins(0, 0, 0, 0)
+        cpu_layout.setSpacing(2)
+        cpu_layout.addLayout(cpu_row)
+        cpu_layout.addWidget(self.cpu_help)
         self.cpu_mode.currentIndexChanged.connect(self._sync_cpu_value)
+        self.cpu_value.valueChanged.connect(self._sync_cpu_value)
         form.addRow("Name", self.name)
         form.addRow("Group", self.group)
         form.addRow("Description", self.description)
         form.addRow("Queue HIP", self.hip_file)
-        form.addRow("Queue CPU", cpu_row)
+        form.addRow("Queue CPU", cpu_container)
         form.addRow("", self.favorite)
         outer.addLayout(form)
 
@@ -426,16 +441,17 @@ class QueueEditorDialog(QtWidgets.QDialog):
         self._refresh_jobs()
 
     def _sync_cpu_value(self) -> None:
-        self.cpu_value.setEnabled(
-            self.cpu_mode.currentData() in {"threads", "reserve"}
-        )
+        sync_cpu_controls(self.cpu_mode, self.cpu_value, self.cpu_help)
 
     def _refresh_jobs(self, current: Any = None) -> None:
         self.jobs.blockSignals(True)
         self.jobs.setRowCount(0)
         for row, job in enumerate(self._jobs()):
             cpu = item_value(job, "cpu", {})
-            cpu_label = item_value(cpu, "mode", "inherit")
+            cpu_label = cpu_setting_label(
+                str(item_value(cpu, "mode", "inherit")),
+                item_value(cpu, "value", None),
+            )
             set_row(
                 self.jobs,
                 row,

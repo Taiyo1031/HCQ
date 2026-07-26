@@ -1,6 +1,6 @@
 # HCQ JSON Format
 
-HCQ 1.1 writes human-readable UTF-8 JSON. Importing JSON never starts a run.
+HCQ 1.1.2 writes human-readable UTF-8 JSON. Importing JSON never starts a run.
 
 ## Common envelope
 
@@ -10,7 +10,7 @@ Every portable document contains:
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.1.1"
+  "hcq_version": "1.1.2"
 }
 ```
 
@@ -39,7 +39,7 @@ No JSON field is evaluated as Python.
 {
   "schema": "hcq.queue-template",
   "schema_version": 1,
-  "hcq_version": "1.1.1",
+  "hcq_version": "1.1.2",
   "houdini_min_version": "21.0",
   "created_with_houdini": "21.0.729",
   "queues": [
@@ -88,3 +88,9 @@ No JSON field is evaluated as Python.
 
 `node_path` is a Houdini network path and is never changed by file-system path
 remapping. Missing nodes must be resolved explicitly in the import preview.
+
+Queue CPU modes are `current`, `all`, `threads`, `reserve`, and `single`. A job
+may additionally use `inherit` to follow its Queue setting. The `threads` and
+`reserve` modes require a positive integer `value`; `reserve` is the number of
+logical threads HCQ should leave free when calculating Houdini's maximum thread
+limit.

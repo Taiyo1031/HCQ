@@ -59,6 +59,20 @@ DISCARD = "Discard Changes"
 IMPORT_JOBS = "Import Jobs"
 JOB_SETTINGS = "Job Settings"
 
+CPU_JOB_ITEMS = (
+    ("Use Queue Setting", "inherit"),
+    ("Use Current Houdini Setting", "current"),
+    ("Use All Logical Threads", "all"),
+    ("Set Maximum Logical Threads", "threads"),
+    ("Leave Logical Threads Free", "reserve"),
+    ("Single Logical Thread", "single"),
+)
+CPU_QUEUE_ITEMS = tuple(item for item in CPU_JOB_ITEMS if item[1] != "inherit")
+CPU_LIMIT_NOTE = (
+    "Thread limits are upper bounds. CPU usage can vary, and some nodes may "
+    "not fully honor the limit."
+)
+
 PREFLIGHT_CHECK = "Preflight Check"
 RUN_QUEUE = "Run Queue"
 DURING_RUN = "During Run:"

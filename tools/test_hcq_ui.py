@@ -19,6 +19,7 @@ from hcq.ui.dialogs import (
 from hcq.ui.editors import QueueEditorDialog
 from hcq.ui.main_panel import HCQPanel
 from hcq.ui import tabs as ui_tabs
+from hcq.ui.common import cpu_setting_label, cpu_setting_summary
 from hcq.navigation import NavigationResult
 
 
@@ -70,7 +71,7 @@ class FakeUpdater:
         self.calls += 1
         return SimpleNamespace(
             status="up_to_date",
-            message="HCQ 1.1.1 is up to date.",
+            message="HCQ 1.1.2 is up to date.",
             release_url="https://github.com/Taiyo1031/HCQ/releases/latest",
         )
 
@@ -427,8 +428,18 @@ def main() -> None:
         jobs=[Job(display_name="Missing", node_path="/obj/missing")],
     )
     editor = QueueEditorDialog(queue)
+    assert manager.settings["default_cpu"] == {"mode": "current"}
+    assert editor.cpu_mode.findText("Leave Logical Threads Free") >= 0
+    assert editor.job_settings.cpu_mode.findText("Leave Logical Threads Free") >= 0
+    assert cpu_setting_label("reserve", 1) == "Leave 1 Thread Free"
+    assert cpu_setting_label("reserve", 2) == "Leave 2 Threads Free"
+    assert (
+        cpu_setting_summary("reserve", 1, available_threads=16)
+        == "Houdini limit: 15 of 16 logical threads (1 thread left free)."
+    )
     editor.cpu_mode.setCurrentIndex(editor.cpu_mode.findData("threads"))
     editor.cpu_value.setValue(6)
+    assert "Houdini limit:" in editor.cpu_help.text()
     editor._accept()
     assert editor.queue.cpu.mode == "threads"
     assert editor.queue.cpu.value == 6
@@ -441,6 +452,7 @@ def main() -> None:
         settings.default_cpu.findData("reserve")
     )
     settings.default_cpu_value.setValue(2)
+    assert "left free" in settings.default_cpu_help.text()
     settings._save()
     assert manager.settings["default_cpu"] == {"mode": "reserve", "value": 2}
     settings.windows_notifications.setChecked(True)

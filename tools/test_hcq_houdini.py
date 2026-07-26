@@ -155,7 +155,17 @@ def main() -> dict:
                 raise AssertionError("Temporary CPU limit was not applied.")
         if hou.maxThreads() != previous_threads:
             raise AssertionError("Temporary CPU limit was not restored.")
+        available_threads = max(1, __import__("os").cpu_count() or 1)
+        expected_reserved_limit = max(1, available_threads - 1)
+        with TemporaryThreadLimit(hou, CpuSetting("reserve", 1)):
+            if hou.maxThreads() != expected_reserved_limit:
+                raise AssertionError(
+                    "Reserved logical-thread limit was not applied."
+                )
+        if hou.maxThreads() != previous_threads:
+            raise AssertionError("Reserved CPU limit was not restored.")
         summary["checks"].append("cpu_restore")
+        summary["checks"].append("cpu_leave_one_thread_free")
 
         notifications = SilentNotifications()
         monitor_settings = {

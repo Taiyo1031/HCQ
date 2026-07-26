@@ -22,7 +22,7 @@ def resolve_thread_limit(setting: CpuSetting, available: int | None = None) -> i
         return min(setting.value, available)
     if setting.mode == "reserve":
         if setting.value is None or setting.value < 1:
-            raise ValueError("Reserve Threads must be a positive integer.")
+            raise ValueError("Threads Left Free must be a positive integer.")
         return max(1, available - setting.value)
     raise ValueError(f"Unsupported CPU mode: {setting.mode}")
 

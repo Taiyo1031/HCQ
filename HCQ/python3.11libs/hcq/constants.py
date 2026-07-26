@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 MIN_HOUDINI_VERSION = (21, 0)
 PRODUCT_NAME = "HCQ"
 REPOSITORY_URL = "https://github.com/Taiyo1031/HCQ"

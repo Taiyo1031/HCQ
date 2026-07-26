@@ -14,10 +14,12 @@ from .bridge import call, item_value, manager_collection, mapping, sequence, val
 from .common import (
     ReorderTable,
     compact_button_row,
+    cpu_setting_label,
     make_button,
     set_row,
     show_error,
     show_warning,
+    sync_cpu_controls,
 )
 from .dialogs import (
     ImportPreviewDialog,
@@ -37,19 +39,10 @@ def _identifier(item: Any) -> str:
 
 def _cpu_label(source: Any) -> str:
     cpu = item_value(source, "cpu", {})
-    mode = str(item_value(cpu, "mode", "current"))
-    amount = item_value(cpu, "value", None)
-    labels = {
-        "current": "Current",
-        "all": "All Threads",
-        "inherit": "Queue Setting",
-        "single": "Single Thread",
-    }
-    if mode == "threads":
-        return f"{amount} Threads"
-    if mode == "reserve":
-        return f"Reserve {amount}"
-    return labels.get(mode, mode.replace("_", " ").title())
+    return cpu_setting_label(
+        str(item_value(cpu, "mode", "current")),
+        item_value(cpu, "value", None),
+    )
 
 
 def _show_navigation_result(
@@ -1221,13 +1214,7 @@ class SettingsTab(QtWidgets.QWidget):
             self.save_behavior.addItem(label, data)
         self.backup = QtWidgets.QCheckBox("Create Backup Before Saving")
         self.default_cpu = QtWidgets.QComboBox()
-        for label, data in (
-            ("Use Current Houdini Setting", "current"),
-            ("All Threads", "all"),
-            ("Fixed Thread Count", "threads"),
-            ("Reserve Threads", "reserve"),
-            ("Single Thread", "single"),
-        ):
+        for label, data in text.CPU_QUEUE_ITEMS:
             self.default_cpu.addItem(label, data)
         self.default_cpu_value = QtWidgets.QSpinBox()
         self.default_cpu_value.setRange(1, 1024)
@@ -1235,7 +1222,17 @@ class SettingsTab(QtWidgets.QWidget):
         default_cpu_row = QtWidgets.QHBoxLayout()
         default_cpu_row.addWidget(self.default_cpu, 1)
         default_cpu_row.addWidget(self.default_cpu_value)
+        self.default_cpu_help = QtWidgets.QLabel()
+        self.default_cpu_help.setWordWrap(True)
+        self.default_cpu_help.setToolTip(text.CPU_LIMIT_NOTE)
+        default_cpu_container = QtWidgets.QWidget()
+        default_cpu_layout = QtWidgets.QVBoxLayout(default_cpu_container)
+        default_cpu_layout.setContentsMargins(0, 0, 0, 0)
+        default_cpu_layout.setSpacing(2)
+        default_cpu_layout.addLayout(default_cpu_row)
+        default_cpu_layout.addWidget(self.default_cpu_help)
         self.default_cpu.currentIndexChanged.connect(self._sync_cpu_value)
+        self.default_cpu_value.valueChanged.connect(self._sync_cpu_value)
         self.default_error = QtWidgets.QComboBox()
         for label, data in (
             ("Stop Queue", "stop_queue"),
@@ -1271,7 +1268,7 @@ class SettingsTab(QtWidgets.QWidget):
             ("Windows Notifications", windows_notification_row),
             ("Save Before Running", self.save_behavior),
             ("HIP Backup", self.backup),
-            ("Default CPU", default_cpu_row),
+            ("Default CPU", default_cpu_container),
             ("Default Error Behavior", self.default_error),
             ("Default Retry Count", self.default_retry),
             ("Default Verification", self.default_verification),
@@ -1411,8 +1408,10 @@ class SettingsTab(QtWidgets.QWidget):
             )
 
     def _sync_cpu_value(self) -> None:
-        self.default_cpu_value.setEnabled(
-            self.default_cpu.currentData() in {"threads", "reserve"}
+        sync_cpu_controls(
+            self.default_cpu,
+            self.default_cpu_value,
+            self.default_cpu_help,
         )
 
     def _restore_defaults(self) -> None:

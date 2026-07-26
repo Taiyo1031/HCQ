@@ -312,6 +312,24 @@ class PreflightChecker:
                     job.id,
                 )
             )
+        if (
+            setting.mode == "reserve"
+            and setting.value
+            and setting.value >= self.available_threads
+        ):
+            report.issues.append(
+                PreflightIssue(
+                    "warning",
+                    "cpu_reserve_clamped",
+                    (
+                        f"Requested leaving {setting.value} logical threads free, "
+                        f"but only {self.available_threads} are available. HCQ "
+                        "will keep one logical thread available to Houdini."
+                    ),
+                    queue.id,
+                    job.id,
+                )
+            )
 
     def _check_custom_hda(
         self,

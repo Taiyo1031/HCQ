@@ -325,6 +325,35 @@ class AdapterRunnerTests(unittest.TestCase):
                 )
             )
 
+    def test_preflight_warns_when_reserved_threads_exceed_capacity(self):
+        node = FakeNode()
+        hou = FakeHou({node.path(): node})
+        job = Job(
+            node_path=node.path(),
+            action="force_cook",
+            cpu=CpuSetting("reserve", 16),
+        )
+        queue = QueueTemplate(
+            name="Queue",
+            hip_file="D:/Project/test.hip",
+            jobs=[job],
+        )
+        report = PreflightChecker(hou, available_threads=16).check(
+            RunList(
+                queues=[queue],
+                save_before_running="never",
+                existing_output_behavior="overwrite",
+            )
+        )
+        warning = next(
+            issue
+            for issue in report.issues
+            if issue.code == "cpu_reserve_clamped"
+        )
+        self.assertEqual(warning.severity, "warning")
+        self.assertIn("one logical thread", warning.message)
+        self.assertTrue(report.can_run)
+
     def test_runner_retries_and_restores_threads(self):
         node = FakeNode()
         node.failures_remaining = 1
