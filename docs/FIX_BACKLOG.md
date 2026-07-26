@@ -215,3 +215,19 @@
   - GitHub README上で3ボタンが独立した一体型ボタンとして表示されることを確認する。
   - Setup、Package Archive、互換ZIPと各SHA-256がReleaseから取得でき、ローカル検証済みchecksumと一致することを確認する。
 - Evidence: `docs/fix_backlog_assets/fix-0007-readme-download-buttons.png`
+
+## FIX-0008: Smart App Control環境でインストールできる導線へ修正する
+
+- Status: `Done`
+- Priority: `P1`
+- Category: `配布/インストール`
+- Summary: 未署名SetupがWindows 11 Smart App Controlに拒否される環境では、Houdini公式Package Browserから導入できるPackage Archiveを推奨経路として提示する。
+- Resolution:
+  - README先頭の緑ボタンを`HCQ-1.2.0-houdini-package.zip`へ変更し、Package Browser手順をOption Aへ移した。
+  - Setupは信頼済みAuthenticode署名がある場合だけ利用する補助経路とし、Smart App Controlを無効化しないよう明記した。
+  - 今後のタグReleaseでは、SetupのAuthenticode署名がWindows上で`Valid`の場合だけEXEとchecksumを公開する。
+  - 署名証明書がない場合もPackage Archiveと旧Updater互換ZIPは公開し、HCQを導入できる状態を維持する。
+- Validation:
+  - Package ArchiveをHoudini 21.0.729のclean preferenceから読み込み、HCQ 1.2.0としてロードできることを確認する。
+  - README公開表示とPackage Archive直リンクを確認する。
+- Evidence: `docs/fix_backlog_assets/fix-0008-smart-app-control-block.png`

@@ -4,8 +4,8 @@ HCQ 1.2 uses one source tree to produce three Windows assets:
 
 | Asset | Purpose |
 | --- | --- |
-| `HCQ-Setup-<version>.exe` | Recommended per-user Windows installation |
-| `HCQ-<version>-houdini-package.zip` | Houdini Package Browser installation |
+| `HCQ-<version>-houdini-package.zip` | Recommended Houdini Package Browser installation |
+| `HCQ-Setup-<version>.exe` | Per-user Windows installation when Authenticode-signed |
 | `HCQ-<version>-windows.zip` | Legacy 1.1.x updater bridge and manual fallback |
 
 Every asset has a matching `.sha256` file. The version in the filename, Python
@@ -54,8 +54,16 @@ path traversal before the clean Houdini load test.
 A `v<version>` tag additionally creates a stable Latest GitHub Release. The
 workflow refuses to overwrite an existing tag release.
 
-Unsigned builds are supported. To enable Authenticode signing, configure both
-repository secrets:
+Unsigned Setup builds are retained for local structural testing, but Windows
+Smart App Control can block them. Public installation instructions must prefer
+the Houdini Package Archive until Setup has a valid RSA Authenticode signature
+from a CA in the Microsoft Trusted Root Program. Do not ask users to disable
+Smart App Control. See Microsoft's
+[Smart App Control overview](https://learn.microsoft.com/windows/apps/develop/smart-app-control/overview)
+and
+[code-signing requirements](https://learn.microsoft.com/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control).
+
+To enable Authenticode signing, configure both repository secrets:
 
 ```text
 HCQ_SIGNING_CERT_BASE64
@@ -63,7 +71,12 @@ HCQ_SIGNING_CERT_PASSWORD
 ```
 
 The certificate is used only during the Windows build. No certificate or
-password is included in artifacts.
+password is included in artifacts. Tagged workflows publish Setup only when
+`Get-AuthenticodeSignature` reports a valid trusted signature; Package Archive
+and legacy ZIP assets remain available without a signing certificate.
+Microsoft
+[Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations)
+is an alternative trusted signing provider when a local PFX is not used.
 
 ## Legacy migration
 

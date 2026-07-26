@@ -16,6 +16,9 @@
   their respective Package JSON layouts from clean temporary preferences.
 - [x] `HCQ-Setup-1.2.0.exe` compiles with Inno Setup 6.7, has a valid PE
   header and SHA-256 contract, and contains the same verified HCQ payload.
+- [x] The unsigned Setup is correctly rejected by Smart App Control on the
+  protected Windows 11 test machine; Package Archive is the documented
+  installation path until a trusted Authenticode certificate is configured.
 - [x] Legacy migration tests preserve settings and modified files while
   backing up and removing only unchanged manifest-owned plug-in files.
 - [x] Migration from the actual `HCQ-1.1.2-windows.zip` preserves settings,
@@ -34,10 +37,12 @@ project-specific assets, performance workloads, or manual visual confirmation.
 
 ## Installation and UI
 
-- [ ] Run the unsigned Setup EXE on a machine whose Application Control policy
-  permits unsigned local installers.
-- [ ] Setup new install, repair, default uninstall, and opt-in data removal.
-- [ ] Setup registers Documents/OneDrive and user-profile Houdini 21.x paths.
+- [ ] Run an RSA Authenticode-signed Setup on a Smart App Control enforcement
+  machine and verify its publisher before installation.
+- [ ] Signed Setup new install, repair, default uninstall, and opt-in data
+  removal.
+- [ ] Signed Setup registers Documents/OneDrive and user-profile Houdini 21.x
+  paths.
 - [x] Upgrade an actual 1.1.2 copy install and confirm all user data remains.
 - [ ] Package JSON loads without startup errors in Houdini 21.0.729.
 - [ ] The HCQ shelf and shelf tool appear.

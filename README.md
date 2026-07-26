@@ -19,8 +19,8 @@ Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 ## Download
 
 <p>
-  <a href="https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-Setup-1.2.0.exe"><img src="docs/readme_assets/download-hcq-setup.svg" alt="Download HCQ Setup"></a>
   <a href="https://github.com/Taiyo1031/HCQ/releases/latest/download/HCQ-1.2.0-houdini-package.zip"><img src="docs/readme_assets/download-houdini-package.svg" alt="Download Houdini Package Archive"></a>
+  <a href="#quick-installation"><img src="docs/readme_assets/view-install-guide.svg" alt="View the HCQ installation guide"></a>
   <a href="https://github.com/Taiyo1031/HCQ/releases"><img src="docs/readme_assets/view-release-downloads.svg" alt="View all HCQ release downloads"></a>
 </p>
 
@@ -28,23 +28,25 @@ Project repository: [Taiyo1031/HCQ](https://github.com/Taiyo1031/HCQ)
 
 | Required download | What to choose |
 | --- | --- |
-| **HCQ** | Click the green **Download HCQ Setup** button. |
+| **HCQ** | Click the green **Houdini Package** button. |
 | **Houdini** | Houdini 21.x for Windows. Skip this if it is already installed. |
 | **Python / PySide6** | Nothing. HCQ uses the versions bundled with Houdini. |
 
-The Windows Setup is the recommended installation. It needs no administrator
-access and registers the same HCQ installation with every detected Houdini
-21.x version. Advanced users can use Houdini's Package Browser with the purple
-Package Archive button.
+The Houdini Package Archive is the recommended installation. It is a ZIP
+installed through Houdini's Package Browser, so Windows Smart App Control does
+not need to run an unverified executable. Do not disable Smart App Control to
+install HCQ.
 
 ```text
-HCQ-Setup-<version>.exe
 HCQ-<version>-houdini-package.zip
+HCQ-Setup-<version>.exe              (requires a trusted signature)
 HCQ-<version>-windows.zip          (legacy updater bridge)
 ```
 
 Each file has a matching `.sha256` download. Do not use GitHub's automatically
-generated **Source code** archives for a normal installation.
+generated **Source code** archives for a normal installation. HCQ 1.2.0 Setup
+is unsigned and can be blocked by Smart App Control; use the Package Archive
+on protected Windows systems.
 
 ## Requirements
 
@@ -56,50 +58,52 @@ No third-party Python package is required at runtime.
 
 ## Quick installation
 
-### Option A — Windows Setup (recommended)
+### Option A — Houdini Package Browser (recommended)
 
 1. Close Houdini.
-2. Download and run `HCQ-Setup-<version>.exe`.
-3. Keep the default current-user installation.
-4. Start Houdini 21.x.
-5. Click **HCQ** on the HCQ shelf. If the shelf is not visible, use the shelf
-   `+` menu to show **HCQ**.
-
-Setup installs the plug-in at:
-
-```text
-%LOCALAPPDATA%\Programs\HCQ
-```
-
-Only a small `packages/hcq.json` registration is added to the Houdini
-preference folders. HCQ also registers the user-profile preference path used
-by `hython`, so both graphical and command-line Houdini load the same code.
-
-### Option B — Houdini Package Browser
-
-1. Download `HCQ-<version>-houdini-package.zip`.
-2. In Houdini, create or switch a pane to **Inspectors ▸ Package Browser**.
-3. Choose **File ▸ Install Package Archive...**.
-4. Select the downloaded ZIP and an installation folder.
-5. Accept the installation, then open the HCQ shelf or Python Panel.
+2. Download `HCQ-<version>-houdini-package.zip`.
+3. Start Houdini and create or switch a pane to
+   **Inspectors ▸ Package Browser**.
+4. Choose **File ▸ Install Package Archive...**.
+5. Select the downloaded ZIP and choose an installation folder.
+6. Accept the installation, then click **HCQ** on the HCQ shelf or create a
+   Python Panel and choose **HCQ — Houdini Cook Queue**.
 
 The archive contains a root-level `hcq.json` and an `HCQ` content folder as
-required by Houdini's Package Browser. It can be installed without manually
-copying files into Documents.
+required by Houdini's Package Browser. Existing settings, Queue Library,
+history, logs, and recovery data remain under `$HOUDINI_USER_PREF_DIR/HCQ`.
+
+### Option B — Windows Setup
+
+Use Windows Setup only when its Authenticode publisher is verified by Windows
+or Smart App Control already recognizes it:
+
+1. Close Houdini, `hython`, and `hbatch`.
+2. Download and run `HCQ-Setup-<version>.exe`.
+3. Keep the default current-user installation.
+4. Start Houdini 21.x and open the HCQ shelf or Python Panel.
+
+Setup installs the plug-in at `%LOCALAPPDATA%\Programs\HCQ` and registers the
+same installation with detected Houdini 21.x versions. Administrator access
+is not required.
+
+If Windows says **Smart App Control blocked an app that may be unsafe**, close
+the message and use Option A. The current Setup is unsigned; there is no safe
+per-app bypass that HCQ should ask you to use.
 
 ### Upgrade from HCQ 1.1.x
 
-Running Windows Setup automatically detects the former copy-installed layout.
-Files declared by the old release manifest are backed up and removed, while
-settings, Queue Library data, history, logs, and recovery data remain in:
+Installing the Package Archive leaves former settings, Queue Library data,
+history, logs, and recovery data in place:
 
 ```text
 $HOUDINI_USER_PREF_DIR\HCQ
 ```
 
-The legacy `HCQ-<version>-windows.zip` remains available so the 1.1.2 Update
-button can reach 1.2.0. After that bridge update, click **Update** again and
-choose **Install and Restart** to move to the standard installation.
+Windows Setup can additionally remove unchanged files from the former
+copy-installed layout after verified backup, but only use it when Windows
+accepts its publisher. The legacy `HCQ-<version>-windows.zip` remains available
+so the 1.1.2 Update button can reach 1.2.0.
 
 ### Confirm that HCQ is installed
 
@@ -325,6 +329,8 @@ inside that folder.
 ## Known limitations
 
 - HCQ 1.2 is supported on Windows 11 and Houdini 21.x only.
+- The HCQ 1.2.0 Setup executable is unsigned and may be blocked by Smart App
+  Control. Use the recommended Houdini Package Archive on protected systems.
 - A foreground Houdini cook may block panel repainting and input.
 - Custom HDA buttons that open modal dialogs are not guaranteed to run
   unattended.

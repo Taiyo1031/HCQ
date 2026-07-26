@@ -79,16 +79,32 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             throw "Release $tag already exists; refusing to overwrite it."
           }
+          $releaseAssets = @(
+            "dist/HCQ-$version-houdini-package.zip",
+            "dist/HCQ-$version-houdini-package.zip.sha256",
+            "dist/HCQ-$version-windows.zip",
+            "dist/HCQ-$version-windows.zip.sha256"
+          )
+          $setup = "dist/HCQ-Setup-$version.exe"
+          $setupSignature = Get-AuthenticodeSignature -FilePath $setup
+          $rsaOid = "1.2.840.113549.1.1.1"
+          if (
+            $setupSignature.Status -eq "Valid" -and
+            $setupSignature.SignerCertificate.PublicKey.Oid.Value -eq $rsaOid
+          ) {
+            $releaseAssets += @($setup, "$setup.sha256")
+          } else {
+            Write-Warning (
+              "Setup is not signed by a trusted RSA Authenticode certificate. " +
+              "It will remain in the workflow artifact but will not be attached " +
+              "to the public Release because Smart App Control can block it."
+            )
+          }
           gh release create $tag `
             --verify-tag `
             --title "HCQ $version" `
             --generate-notes `
             --latest `
-            dist/HCQ-Setup-$version.exe `
-            dist/HCQ-Setup-$version.exe.sha256 `
-            dist/HCQ-$version-houdini-package.zip `
-            dist/HCQ-$version-houdini-package.zip.sha256 `
-            dist/HCQ-$version-windows.zip `
-            dist/HCQ-$version-windows.zip.sha256
+            @releaseAssets
     permissions:
       contents: write

@@ -12,6 +12,24 @@ Recommended installation
 ------------------------
 
 1. Close Houdini, hython, and hbatch.
+2. Download HCQ-1.2.0-houdini-package.zip.
+3. Start Houdini and open Inspectors > Package Browser.
+4. Choose File > Install Package Archive.
+5. Select the downloaded ZIP and choose an installation folder.
+6. Accept the installation and open the HCQ shelf, or create a Python Panel
+   and choose "HCQ — Houdini Cook Queue".
+
+The Package Archive is a ZIP and does not require Windows to run an unsigned
+executable. Do not disable Smart App Control to install HCQ.
+
+Optional Windows Setup
+----------------------
+
+Use HCQ-Setup-1.2.0.exe only when Windows verifies its Authenticode publisher
+or Smart App Control already recognizes it. The current 1.2.0 Setup is
+unsigned and can be blocked on protected Windows 11 systems.
+
+1. Close Houdini, hython, and hbatch.
 2. Download and run HCQ-Setup-1.2.0.exe.
 3. Keep the default current-user installation.
 4. Start Houdini 21.x.
@@ -26,21 +44,17 @@ It registers the same program with every detected Houdini 21.x preference
 folder, including the user-profile location used by hython. Administrator
 access is not required.
 
-Houdini Package Browser installation
-------------------------------------
-
-1. Download HCQ-1.2.0-houdini-package.zip.
-2. Open Inspectors > Package Browser in Houdini.
-3. Choose File > Install Package Archive.
-4. Select the ZIP and an installation folder.
-5. Accept the installation and open the HCQ shelf or Python Panel.
+If Smart App Control blocks Setup, close the warning and use the recommended
+Package Archive instructions above. HCQ does not recommend turning off Windows
+security protection.
 
 Upgrade from HCQ 1.1.x
 ----------------------
 
-Windows Setup migrates the old copy-installed layout. Manifest-owned plug-in
-files are backed up and removed, while settings, queues, run history, logs,
-and recovery data remain under $HOUDINI_USER_PREF_DIR\HCQ.
+Package Archive installation keeps settings, queues, run history, logs, and
+recovery data under $HOUDINI_USER_PREF_DIR\HCQ. Windows Setup can additionally
+back up and remove unchanged manifest-owned files from the old layout when
+Windows accepts the installer.
 
 HCQ-1.2.0-windows.zip is provided only as an updater bridge for existing
 1.1.2 installations and as an advanced manual fallback.
